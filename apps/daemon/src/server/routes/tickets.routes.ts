@@ -30,6 +30,7 @@ import type { Project } from "../../types/config.types.js";
 import type { TicketPhase } from "../../types/ticket.types.js";
 import { resolveTargetPhase, getPhaseConfig } from "../../services/session/phase-config.js";
 import { getWipStatus } from "../../services/session/wip.js";
+import { checkPhaseEntry } from "../../services/session/entry-check.js";
 import { chatService } from "../../services/chat.service.js";
 
 const upload = multer({
@@ -165,6 +166,28 @@ export function registerTicketRoutes(
           console.log(
             `[updateTicket] Phase ${ticketUpdates.phase} is disabled, resolved to ${resolvedPhase}`,
           );
+        }
+      }
+
+      // Entry check: the template may name a command that must pass before a
+      // ticket enters this phase. Runs before the WIP check and regardless of
+      // force, which exceeds a limit but does not skip a check.
+      if (resolvedPhase && resolvedPhase !== oldPhase) {
+        const entry = await checkPhaseEntry({
+          projectId,
+          projectPath: getProjects().get(projectId)?.path,
+          ticketId,
+          fromPhase: oldPhase,
+          toPhase: resolvedPhase,
+        });
+        if (entry && !entry.allowed) {
+          res.status(409).json({
+            error: "Entry check refused",
+            message: `Move to ${resolvedPhase} refused: ${entry.reason}`,
+            phase: resolvedPhase,
+            reason: entry.reason,
+          });
+          return;
         }
       }
 

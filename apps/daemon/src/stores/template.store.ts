@@ -388,12 +388,52 @@ export async function getWorkflowWithFullPhases(
 }
 
 /**
+ * The workflow object a new template is written as.
+ */
+export function buildNewTemplate(
+  name: string,
+  description: string,
+  phases: Phase[],
+  entryChecks?: WorkflowTemplate["entryChecks"],
+): WorkflowTemplate {
+  return {
+    name,
+    description,
+    version: "1.0.0",
+    phases,
+    ...(entryChecks ? { entryChecks } : {}),
+  };
+}
+
+/**
+ * The workflow object an update produces. Fields the update omits are kept,
+ * including entryChecks, so an editor that sends only phases does not drop
+ * them; an entryChecks object replaces them and {} clears them.
+ */
+export function applyTemplateUpdate(
+  template: WorkflowTemplate,
+  updates: { description?: string; phases?: Phase[]; entryChecks?: WorkflowTemplate["entryChecks"] },
+): WorkflowTemplate {
+  return {
+    ...template,
+    description: updates.description ?? template.description,
+    phases: updates.phases ?? template.phases,
+    ...(updates.entryChecks !== undefined ? { entryChecks: updates.entryChecks } : {}),
+    version: incrementVersion(
+      typeof template.version === "number" ? `${template.version}.0.0` : template.version,
+      "patch"
+    ),
+  };
+}
+
+/**
  * Create a new template with workflow file and registry entry.
  */
 export async function createTemplate(
   name: string,
   description: string,
   phases: Phase[],
+  entryChecks?: WorkflowTemplate["entryChecks"],
 ): Promise<WorkflowTemplate> {
   await ensureTemplatesDir();
 
@@ -401,12 +441,7 @@ export async function createTemplate(
   await fs.mkdir(templateDir, { recursive: true });
   await fs.mkdir(path.join(templateDir, "agents"), { recursive: true });
 
-  const template: WorkflowTemplate = {
-    name,
-    description,
-    version: "1.0.0",
-    phases,
-  };
+  const template = buildNewTemplate(name, description, phases, entryChecks);
 
   await fs.writeFile(getWorkflowPath(name), JSON.stringify(template, null, 2));
 
@@ -427,22 +462,14 @@ export async function createTemplate(
  */
 export async function updateTemplate(
   name: string,
-  updates: { description?: string; phases?: Phase[] },
+  updates: { description?: string; phases?: Phase[]; entryChecks?: WorkflowTemplate["entryChecks"] },
 ): Promise<WorkflowTemplate> {
   const template = await getWorkflow(name);
   if (!template) {
     throw new Error(`Template "${name}" not found`);
   }
 
-  const updated: WorkflowTemplate = {
-    ...template,
-    description: updates.description ?? template.description,
-    phases: updates.phases ?? template.phases,
-    version: incrementVersion(
-      typeof template.version === "number" ? `${template.version}.0.0` : template.version,
-      "patch"
-    ),
-  };
+  const updated = applyTemplateUpdate(template, updates);
 
   await fs.writeFile(getWorkflowPath(name), JSON.stringify(updated, null, 2));
 
