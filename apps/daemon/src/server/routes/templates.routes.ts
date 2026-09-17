@@ -12,6 +12,7 @@ import {
   getAgentPrompt,
   saveAgentPrompt,
 } from '../../stores/template.store.js';
+import { validateEntryChecks } from '../../services/session/entry-check.js';
 
 export function registerTemplateRoutes(app: Express): void {
   // GET /api/templates - List all templates
@@ -57,12 +58,17 @@ export function registerTemplateRoutes(app: Express): void {
   // POST /api/templates - Create new template
   app.post('/api/templates', async (req: Request, res: Response) => {
     try {
-      const { name, description, phases } = req.body;
+      const { name, description, phases, entryChecks } = req.body;
       if (!name || !description) {
         res.status(400).json({ error: 'name and description required' });
         return;
       }
-      const template = await createTemplate(name, description, phases || []);
+      const invalid = validateEntryChecks(entryChecks);
+      if (invalid) {
+        res.status(400).json({ error: invalid });
+        return;
+      }
+      const template = await createTemplate(name, description, phases || [], entryChecks);
       res.status(201).json(template);
     } catch (err) {
       res.status(500).json({ error: (err as Error).message });
@@ -73,8 +79,13 @@ export function registerTemplateRoutes(app: Express): void {
   app.put('/api/templates/:name', async (req: Request, res: Response) => {
     try {
       const name = decodeURIComponent(req.params.name);
-      const { description, phases } = req.body;
-      const template = await updateTemplate(name, { description, phases });
+      const { description, phases, entryChecks } = req.body;
+      const invalid = validateEntryChecks(entryChecks);
+      if (invalid) {
+        res.status(400).json({ error: invalid });
+        return;
+      }
+      const template = await updateTemplate(name, { description, phases, entryChecks });
       res.json(template);
     } catch (err) {
       res.status(500).json({ error: (err as Error).message });

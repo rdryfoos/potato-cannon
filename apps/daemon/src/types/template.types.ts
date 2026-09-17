@@ -70,12 +70,21 @@ export interface Phase {
   requiresWorktree?: boolean;
 }
 
+// A command the daemon runs before a ticket enters a phase. Exit zero lets the
+// move through; anything else refuses it. See services/session/entry-check.ts.
+export interface EntryCheck {
+  command: string[]; // program then arguments, executed without a shell; a leading ~/ is the daemon user's home
+  timeoutSeconds?: number; // default 60
+}
+
 // Template types
 export interface WorkflowTemplate {
   name: string;
   description: string;
   version: string; // Semver format "1.0.0"
   phases: Phase[];
+  // Keyed by phase name, including the injected Ideas and Done.
+  entryChecks?: Record<string, EntryCheck>;
 }
 
 export interface TemplateRegistryEntry {

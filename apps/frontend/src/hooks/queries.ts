@@ -1,5 +1,6 @@
 // src/hooks/queries.ts
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
 import { api } from '@/api/client'
 import type { Ticket, Template, TemplatePhase } from '@potato-cannon/shared'
 
@@ -152,6 +153,14 @@ export function useUpdateTicket() {
       updates: Partial<Ticket> & { force?: boolean }
     }) => api.updateTicket(projectId, ticketId, updates),
     onSuccess: (_, { projectId, ticketId }) => {
+      queryClient.invalidateQueries({ queryKey: ['tickets', projectId] })
+      queryClient.invalidateQueries({ queryKey: ['ticket', projectId, ticketId] })
+    },
+    // A refused update must be seen. The daemon refuses a phase move whose entry
+    // check fails and says why in the error message; without this a refused drag
+    // snaps back in silence.
+    onError: (error, { projectId, ticketId }) => {
+      toast.error((error as Error).message || 'Update failed')
       queryClient.invalidateQueries({ queryKey: ['tickets', projectId] })
       queryClient.invalidateQueries({ queryKey: ['ticket', projectId, ticketId] })
     }
