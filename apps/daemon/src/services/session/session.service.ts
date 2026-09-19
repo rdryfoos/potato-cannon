@@ -1480,6 +1480,18 @@ export class SessionService {
     completedPhase: TicketPhase,
     projectPath: string
   ): Promise<void> {
+    // Second guard, cheaper than the first and behind it: the ticket may have
+    // been moved by hand between the completion arriving and this call. Only
+    // the phase that actually finished may advance the ticket out of itself.
+    const beforeTransition = getTicket(projectId, ticketId);
+    if (beforeTransition && beforeTransition.phase !== completedPhase) {
+      console.log(
+        `[handlePhaseTransition] ${ticketId} left ${completedPhase} by hand and is in ` +
+          `${beforeTransition.phase}; not advancing it`
+      );
+      return;
+    }
+
     const nextPhase = await getNextEnabledPhase(projectId, completedPhase);
     if (!nextPhase) {
       console.log(`[handlePhaseTransition] No next phase after ${completedPhase}`);

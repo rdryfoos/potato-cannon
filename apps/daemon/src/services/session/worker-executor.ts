@@ -459,6 +459,37 @@ function updateNestedActiveWorker(
 }
 
 /**
+ * Is this completion stale: did the ticket leave the phase the agent was
+ * spawned in while that agent was still running?
+ *
+ * A hand move does not stop a running session and does not clear the phase's
+ * worker state, so the exit handler arrives carrying the phase the agent
+ * started in. Without this, the finished agent advances the card from wherever
+ * a person has since put it: observed 2026-09-17 on a card moved by hand from
+ * Build to Review, which the exiting Build agent then moved to Gate. That is a
+ * transition no human authorised, and on an estate where leaving a column is a
+ * human act it is the orchestrator overruling the hand.
+ */
+export function isStaleCompletion(
+  completionPhase: TicketPhase,
+  currentPhase: TicketPhase | null | undefined
+): boolean {
+  return !!currentPhase && currentPhase !== completionPhase;
+}
+
+async function currentTicketPhase(
+  projectId: string,
+  ticketId: string
+): Promise<TicketPhase | null> {
+  const { getTicket } = await import("../../stores/ticket.store.js");
+  try {
+    return (getTicket(projectId, ticketId)?.phase as TicketPhase) ?? null;
+  } catch {
+    return null; // unknown ticket: not evidence of staleness, so do not act on it
+  }
+}
+
+/**
  * Handle agent completion - coordinate next steps
  */
 export async function handleAgentCompletion(
@@ -469,8 +500,23 @@ export async function handleAgentCompletion(
   exitCode: number,
   agentId: string,
   verdict: { approved: boolean; feedback?: string },
-  callbacks: ExecutorCallbacks
+  callbacks: ExecutorCallbacks,
+  deps: { getCurrentPhase?: (projectId: string, ticketId: string) => Promise<TicketPhase | null> } = {}
 ): Promise<void> {
+  // Before anything else, including any read of phase config or worker state:
+  // if the ticket has left this phase, this completion has nothing to say
+  // about where it goes next.
+  const currentPhase = await (deps.getCurrentPhase ?? currentTicketPhase)(projectId, ticketId);
+  if (isStaleCompletion(phase, currentPhase)) {
+    await logToDaemon(
+      projectId,
+      ticketId,
+      `Stale completion ignored: agent ${agentId} finished in ${phase}, ticket is now in ${currentPhase}`,
+      { agentId, exitCode }
+    );
+    return;
+  }
+
   const phaseConfig = await getPhaseConfig(projectId, phase);
   if (!phaseConfig) return;
 
