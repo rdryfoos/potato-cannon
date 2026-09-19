@@ -1,7 +1,21 @@
 import path from "path";
 import os from "os";
 
-export const GLOBAL_DIR = path.join(os.homedir(), ".potato-cannon");
+/**
+ * Where the Cannon keeps everything: the database, the templates, the session
+ * logs, the daemon's own lock and pid.
+ *
+ * POTATO_CANNON_HOME moves all of it. It exists for tests, which otherwise
+ * write into the live installation on a developer's machine: chat.store's
+ * tests called initDatabase() and so opened, and migrated, the running
+ * daemon's own potato.db, and three others left directories behind under
+ * project-data. A suite built from a newer branch would have run its
+ * migrations against a board in daily use.
+ *
+ * It is read once, at import, because every export below is a constant.
+ */
+export const GLOBAL_DIR =
+  process.env.POTATO_CANNON_HOME?.trim() || path.join(os.homedir(), ".potato-cannon");
 export const CONFIG_FILE = path.join(GLOBAL_DIR, "config.json");
 export const PROJECTS_DIR = path.join(GLOBAL_DIR, "projects");
 export const TASKS_DIR = path.join(GLOBAL_DIR, "tickets");
