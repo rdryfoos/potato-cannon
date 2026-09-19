@@ -1,4 +1,10 @@
-import { describe, it, beforeEach, afterEach, before } from "node:test";
+// First import, and it must stay first: this suite opens a real database and
+// runs migrations on it, and this points the Cannon's home at a directory of
+// its own. Without it, these tests open and migrate the live installation's
+// potato.db, the board a daemon on this machine is serving.
+import { TEST_HOME, removeTestHome } from "./helpers/test-home.js";
+
+import { describe, it, beforeEach, afterEach, before, after } from "node:test";
 import assert from "node:assert";
 
 import {
@@ -19,6 +25,20 @@ import { initDatabase, getDatabase } from "../db.js";
 before(() => {
   // initDatabase runs migrations including V10 which creates pending_questions
   initDatabase();
+});
+
+after(() => {
+  removeTestHome();
+});
+
+describe("the database this suite opens", () => {
+  it("is this suite's own, not the live installation's", () => {
+    const file = (getDatabase() as unknown as { name: string }).name;
+    assert.ok(
+      file.startsWith(TEST_HOME),
+      `tests must not open the live database: opened ${file}, expected it under ${TEST_HOME}`
+    );
+  });
 });
 
 // ─── Helpers ─────────────────────────────────────────────────────────
