@@ -34,6 +34,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { timeAgo } from '@/lib/utils'
 import { DetailsTab } from './DetailsTab'
 import { SettingsTab } from './SettingsTab'
+import { ThreadTab } from './ThreadTab'
 import { ActivityTab } from './ActivityTab'
 import type { TemplatePhase } from '@potato-cannon/shared'
 
@@ -412,6 +413,7 @@ export function TicketDetailPanel() {
                 <TabsList className="mx-4 mt-4 mb-2 w-fit">
                   <TabsTrigger value="activity">Activity</TabsTrigger>
                   <TabsTrigger value="details">Details</TabsTrigger>
+                  <TabsTrigger value="thread">Thread</TabsTrigger>
                   <TabsTrigger value="settings">Settings</TabsTrigger>
                 </TabsList>
 
@@ -435,6 +437,9 @@ export function TicketDetailPanel() {
                       />
                     </div>
                   </ScrollArea>
+                </TabsContent>
+                <TabsContent value="thread" className="mt-0 flex-1 min-h-0">
+                  <ThreadTab projectId={currentProjectId!} ticketId={ticket.id} />
                 </TabsContent>
                 <TabsContent value="settings" className="mt-0 flex-1 min-h-0">
                   <ScrollArea className="h-full">

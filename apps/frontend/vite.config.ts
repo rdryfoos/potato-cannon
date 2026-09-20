@@ -24,7 +24,10 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': 'http://127.0.0.1:3131',
-      '/events': 'http://127.0.0.1:3131'
+      '/events': 'http://127.0.0.1:3131',
+      // The Loupe bundle the Thread tab frames. Same origin as the manifest
+      // it loads, which is what keeps Loupe's source peek switched on.
+      '/loupe': 'http://127.0.0.1:3131'
     }
   }
 })
