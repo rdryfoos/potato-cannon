@@ -41,4 +41,7 @@ export interface TicketHistoryEntry {
   sessions?: HistorySessionRecord[]
   endedAt?: string
   reason?: string
+  /** Who caused this transition: "hand:<user>", "auto", or "hook:<name>". Absent on
+   * rows written before the actor was recorded. */
+  actor?: string
 }

@@ -51,6 +51,10 @@ import type { TaskContext } from "../../types/orchestration.types.js";
 
 import type { ActiveSession } from "./types.js";
 import { ensureWorktree } from "./worktree.js";
+import { checkPhaseEntry } from "./entry-check.js";
+
+/** The daemon advancing a card on its own, as opposed to a hand or a named hook. */
+const AUTO_ACTOR = "auto";
 import { getPhaseConfig, phaseRequiresWorktree, getNextEnabledPhase } from "./phase-config.js";
 import { buildBrainstormPrompt, buildEpicChatPrompt, buildAgentPrompt } from "./prompts.js";
 import { tryLoadAgentDefinition } from "./agent-loader.js";
@@ -1509,7 +1513,32 @@ export class SessionService {
       return;
     }
 
-    const ticket = await updateTicket(projectId, ticketId, { phase: nextPhase });
+    // The entry check runs here too. Until 2026-09-20 it ran only when a hand moved a
+    // card through the API, so a card walking the board on the daemon's own legs passed
+    // no check at all: the guards on the columns, and the packet a reviewer reads, were
+    // skipped on the one path the board actually uses.
+    const autoEntry = await checkPhaseEntry({
+      projectId,
+      projectPath,
+      ticketId,
+      fromPhase: completedPhase,
+      toPhase: nextPhase,
+      actor: AUTO_ACTOR,
+    });
+    if (autoEntry && !autoEntry.allowed) {
+      console.log(
+        `[handlePhaseTransition] ${nextPhase} refused for ${ticketId}: ${autoEntry.reason}`
+      );
+      await updateTicket(projectId, ticketId, { blocked: true, reason: autoEntry.reason });
+      const refused = getTicket(projectId, ticketId);
+      eventBus.emit("ticket:updated", { projectId, ticket: refused });
+      return;
+    }
+
+    const ticket = await updateTicket(projectId, ticketId, {
+      phase: nextPhase,
+      actor: AUTO_ACTOR,
+    });
     console.log(`[handlePhaseTransition] Transitioned to ${nextPhase}`);
 
     // Emit SSE events so frontend updates

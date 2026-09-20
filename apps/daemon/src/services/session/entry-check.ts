@@ -28,6 +28,10 @@ export interface EntryCheckContext {
   ticketId: string;
   fromPhase: string;
   toPhase: string;
+  /** Who is causing this move: "hand:<user>", "auto", or "hook:<name>". The check is
+   * told rather than left to guess, because an estate writing its own account of a card
+   * cannot tell a human's decision from the machine's from inside the command. */
+  actor?: string;
 }
 
 export interface EntryCheckResult {
@@ -91,6 +95,7 @@ export function runEntryCheck(check: EntryCheck, ctx: EntryCheckContext): Promis
           POTATO_TICKET_ID: ctx.ticketId,
           POTATO_FROM_PHASE: ctx.fromPhase,
           POTATO_TO_PHASE: ctx.toPhase,
+          POTATO_ACTOR: ctx.actor ?? "",
         },
       },
       (error, stdout, stderr) => {

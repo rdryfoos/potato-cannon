@@ -66,6 +66,7 @@ interface HistoryRow {
   entered_at: string;
   exited_at: string | null;
   reason: string | null;
+  actor: string | null;
 }
 
 
@@ -301,10 +302,11 @@ export class TicketStore {
       const historyId = randomUUID();
       this.db
         .prepare(
-          `INSERT INTO ticket_history (id, ticket_id, phase, entered_at, reason)
-           VALUES (?, ?, ?, ?, ?)`
+          `INSERT INTO ticket_history (id, ticket_id, phase, entered_at, reason, actor)
+           VALUES (?, ?, ?, ?, ?, ?)`
         )
-        .run(historyId, ticketId, updates.phase, now, updates.reason ?? null);
+        .run(historyId, ticketId, updates.phase, now, updates.reason ?? null,
+             updates.actor ?? null);
 
       // Clear pending_phase when ticket actually moves to a new phase
       fields.push("pending_phase = ?");
@@ -483,6 +485,7 @@ export class TicketStore {
       at: row.entered_at,
       endedAt: row.exited_at || undefined,
       reason: row.reason || undefined,
+      actor: row.actor || undefined,
     };
   }
 }

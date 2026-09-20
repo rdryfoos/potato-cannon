@@ -33,6 +33,8 @@ export interface UpdateTicketInput {
   pendingPhase?: string | null;
   reason?: string;
   blocked?: boolean;
+  /** Who caused a phase change: "hand:<user>", "auto", or "hook:<name>". */
+  actor?: string;
 }
 
 export type ArtifactType =
