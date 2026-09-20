@@ -140,8 +140,21 @@ export function buildAdhocChatArgs(mcpConfig: unknown, promptOrMessage: string, 
     "--verbose",
     "--mcp-config",
     JSON.stringify(mcpConfig),
+    // An ad-hoc agent answers questions about work somebody else did. It has no call
+    // to change anything, and no call to leave the machine, so it is given the tools
+    // that read and refused the ones that do not. Bash is on the refused list because
+    // a shell is every other tool at once: with it, "cannot write" and "cannot reach
+    // the network" are sentences rather than facts.
+    //
+    // What this does not do, stated because an estate declaring its surface has to
+    // know: it does not confine reads to a directory. Read, Grep and Glob take
+    // absolute paths and Claude Code has no jail, so an ad-hoc agent can read whatever
+    // the account running the daemon can read. The prompt can ask it not to; only the
+    // account's own permissions can stop it.
+    "--allowedTools",
+    "Read,Grep,Glob",
     "--disallowedTools",
-    "Skill(superpowers:*),Edit,Write,NotebookEdit",
+    "Skill(superpowers:*),Edit,Write,NotebookEdit,Bash,WebFetch,WebSearch",
   ];
   if (resumeClaudeSessionId) {
     args.push("--resume", resumeClaudeSessionId);

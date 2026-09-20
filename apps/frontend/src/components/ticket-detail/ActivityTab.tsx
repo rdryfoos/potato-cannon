@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo, type KeyboardEvent } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Send, Loader2, AlertCircle, Bell, Paperclip, Bot, Brain, ChevronUp, ChevronDown } from 'lucide-react'
+import { Send, Loader2, AlertCircle, Bell, Paperclip, Bot, Brain, ChevronUp, ChevronDown, MessageCircleQuestion } from 'lucide-react'
 import { renderMarkdown } from '@/lib/markdown'
 import { api } from '@/api/client'
 import { Button } from '@/components/ui/button'
@@ -33,6 +33,17 @@ interface ChatMessage {
     description?: string
   }
 }
+
+/**
+ * What the Buddy button says to open with. The behaviour lives in the estate, in
+ * robots/buddy.md, which is a governed file: a card branch that changes it is red at
+ * the Gate. This string only points at it, so the Cannon is not the place anyone has
+ * to edit to change what a buddy does.
+ */
+const BUDDY_OPENING =
+  'Read robots/buddy.md in this project and follow it for this card. ' +
+  'Then open with your three questions: what this card actually changes, ' +
+  'what you would worry about, and what is not covered.'
 
 export function ActivityTab({ projectId, ticketId, currentPhase: propPhase, history, archived }: ActivityTabProps) {
   const [input, setInput] = useState('')
@@ -344,6 +355,28 @@ export function ActivityTab({ projectId, ticketId, currentPhase: propPhase, hist
                 {option}
               </Button>
             ))}
+          </div>
+        )}
+
+        {/* Buddy: one click, on a card waiting to be aligned. It starts the same
+            ticket-wide Q&A session the input box below starts, with an opening
+            message that points the agent at the estate's own robots/buddy.md. The
+            estate governs what a buddy is; this button only asks for one. */}
+        {(currentPhase === 'Review' || currentPhase === 'Align') && !ticketChatContextId && (
+          <div className="px-4 pb-2">
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={isWaitingForResponse}
+              onClick={() => handleSend(BUDDY_OPENING)}
+            >
+              <MessageCircleQuestion className="h-4 w-4" />
+              <span className="ml-2">Buddy</span>
+            </Button>
+            <span className="ml-3 text-xs text-text-muted">
+              Reads this card and its branch, and answers questions. It cannot write or
+              reach the network.
+            </span>
           </div>
         )}
 
