@@ -29,6 +29,7 @@ import {
   registerTicketChatRoutes,
   registerFolderRoutes,
   registerEpicRoutes,
+  registerThreadRoutes,
   refreshProjects,
   getProjects,
 } from "./routes/index.js";
@@ -643,6 +644,7 @@ export async function main(): Promise<void> {
   registerTicketChatRoutes(app, sessionService, getProjects);
   registerFolderRoutes(app);
   registerEpicRoutes(app, sessionService, () => projects);
+  registerThreadRoutes(app, getProjects);
 
   // SPA catch-all route - fallback to index.html for SPA routing
   if (frontendDist) {
