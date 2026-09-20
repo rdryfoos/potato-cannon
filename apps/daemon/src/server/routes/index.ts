@@ -16,3 +16,4 @@ export { registerTicketChatRoutes } from './ticket-chat.routes.js';
 export { registerFolderRoutes } from "./folders.routes.js";
 export { registerEpicRoutes } from "./epics.routes.js";
 export { registerThreadRoutes } from "./thread.routes.js";
+export { registerTryRoutes } from "./try.routes.js";

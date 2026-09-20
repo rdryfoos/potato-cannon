@@ -30,6 +30,7 @@ import {
   registerFolderRoutes,
   registerEpicRoutes,
   registerThreadRoutes,
+  registerTryRoutes,
   refreshProjects,
   getProjects,
 } from "./routes/index.js";
@@ -645,6 +646,7 @@ export async function main(): Promise<void> {
   registerFolderRoutes(app);
   registerEpicRoutes(app, sessionService, () => projects);
   registerThreadRoutes(app, getProjects);
+  registerTryRoutes(app, getProjects);
 
   // SPA catch-all route - fallback to index.html for SPA routing
   if (frontendDist) {
