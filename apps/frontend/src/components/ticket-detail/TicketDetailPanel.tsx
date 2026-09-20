@@ -33,6 +33,7 @@ import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { timeAgo } from '@/lib/utils'
 import { DetailsTab } from './DetailsTab'
+import { TryItPanel } from './TryItPanel'
 import { SettingsTab } from './SettingsTab'
 import { ThreadTab } from './ThreadTab'
 import { ActivityTab } from './ActivityTab'
@@ -429,6 +430,15 @@ export function TicketDetailPanel() {
                 <TabsContent value="details" className="mt-0 flex-1 min-h-0">
                   <ScrollArea className="h-full">
                     <div className="px-4 pb-4">
+                      {/* Under review is when somebody is asking whether the thing
+                          works, so this is where the answer belongs. The column is
+                          named Review in the stock template and Align in an estate
+                          that renamed it; both are the same moment. */}
+                      {(ticket.phase === 'Review' || ticket.phase === 'Align') && (
+                        <div className="mb-4">
+                          <TryItPanel projectId={currentProjectId!} ticketId={ticket.id} />
+                        </div>
+                      )}
                       <DetailsTab
                         projectId={currentProjectId!}
                         ticketId={ticket.id}
