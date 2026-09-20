@@ -3,6 +3,65 @@ import fs from "fs/promises";
 import { existsSync } from "fs";
 import path from "path";
 
+
+function git(projectPath: string, command: string): string {
+  return execSync(command, { cwd: projectPath, encoding: "utf-8", stdio: "pipe" }).trim();
+}
+
+function refExists(projectPath: string, ref: string): boolean {
+  try {
+    git(projectPath, `git rev-parse --verify --quiet ${ref}^{commit}`);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Where a card's branch starts from.
+ *
+ * A project with a remote branches from the remote's default branch, so a card starts
+ * from what the host has rather than from whatever the local checkout happens to be
+ * sitting on. A project without one branches from its own default branch at local HEAD.
+ *
+ * The earlier version always used `origin/master`, and consulted origin even when the
+ * project had no remote at all. A project with no remote and a `main` default branch
+ * could satisfy neither half of that ref, so worktree creation failed for every card,
+ * every time.
+ */
+export function resolveStartPoint(projectPath: string): string {
+  let remotes: string[] = [];
+  try {
+    remotes = git(projectPath, "git remote").split("\n").map((r) => r.trim()).filter(Boolean);
+  } catch {
+    remotes = [];
+  }
+
+  if (remotes.includes("origin")) {
+    try {
+      git(projectPath, "git fetch origin");
+    } catch (fetchError) {
+      console.warn(`[worktree] git fetch origin failed: ${(fetchError as Error).message}`);
+    }
+    try {
+      const head = git(projectPath, "git symbolic-ref refs/remotes/origin/HEAD")
+        .replace("refs/remotes/origin/", "");
+      if (head && refExists(projectPath, `origin/${head}`)) return `origin/${head}`;
+    } catch {
+      // origin has no HEAD ref; fall through to the named guesses
+    }
+    for (const branch of ["main", "master"]) {
+      if (refExists(projectPath, `origin/${branch}`)) return `origin/${branch}`;
+    }
+    console.warn("[worktree] origin is configured but has no usable default branch; using the local one");
+  }
+
+  for (const branch of ["main", "master"]) {
+    if (refExists(projectPath, branch)) return branch;
+  }
+  return "HEAD";
+}
+
 /**
  * Ensure a git worktree exists for a ticket.
  * Creates the worktree if it doesn't exist, or returns the path if it does.
@@ -31,43 +90,7 @@ export async function ensureWorktree(
   await fs.mkdir(worktreesDir, { recursive: true });
 
   try {
-    // Fetch origin so tracking refs are current
-    try {
-      execSync("git fetch origin", {
-        cwd: projectPath,
-        encoding: "utf-8",
-        stdio: "pipe",
-      });
-    } catch (fetchError) {
-      console.warn(`[worktree] git fetch origin failed: ${(fetchError as Error).message}`);
-    }
-
-    // Get the default branch name from origin
-    let baseBranchName: string;
-    try {
-      baseBranchName = execSync("git symbolic-ref refs/remotes/origin/HEAD", {
-        cwd: projectPath,
-        encoding: "utf-8",
-        stdio: "pipe",
-      })
-        .trim()
-        .replace("refs/remotes/origin/", "");
-    } catch {
-      // Fallback: try main, then master
-      try {
-        execSync("git rev-parse --verify origin/main", {
-          cwd: projectPath,
-          encoding: "utf-8",
-          stdio: "pipe",
-        });
-        baseBranchName = "main";
-      } catch {
-        baseBranchName = "master";
-      }
-    }
-
-    // Branch from the remote tracking ref, not the local branch
-    const startPoint = `origin/${baseBranchName}`;
+    const startPoint = resolveStartPoint(projectPath);
 
     console.log(
       `Creating worktree for ticket ${ticketId} from ${startPoint}...`,
@@ -121,8 +144,15 @@ export async function ensureWorktree(
 
     return worktreePath;
   } catch (error) {
-    console.error(`Failed to create worktree: ${(error as Error).message}`);
-    return projectPath;
+    // No silent fallback to the project's own checkout. A phase that declares
+    // requiresWorktree gets a worktree or gets nothing: falling back puts an agent in
+    // the primary checkout, on the default branch, where a commit lands on main with
+    // no branch, no review and no promotion. In the run that found this, the only
+    // thing that kept main clean was an agent noticing where it was and refusing to
+    // work, which is judgment rather than a guard.
+    const message = `Failed to create worktree for ${ticketId} at ${worktreePath}: ${(error as Error).message}`;
+    console.error(message);
+    throw new Error(message);
   }
 }
 
