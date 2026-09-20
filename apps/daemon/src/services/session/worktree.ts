@@ -144,8 +144,15 @@ export async function ensureWorktree(
 
     return worktreePath;
   } catch (error) {
-    console.error(`Failed to create worktree: ${(error as Error).message}`);
-    return projectPath;
+    // No silent fallback to the project's own checkout. A phase that declares
+    // requiresWorktree gets a worktree or gets nothing: falling back puts an agent in
+    // the primary checkout, on the default branch, where a commit lands on main with
+    // no branch, no review and no promotion. In the run that found this, the only
+    // thing that kept main clean was an agent noticing where it was and refusing to
+    // work, which is judgment rather than a guard.
+    const message = `Failed to create worktree for ${ticketId} at ${worktreePath}: ${(error as Error).message}`;
+    console.error(message);
+    throw new Error(message);
   }
 }
 
