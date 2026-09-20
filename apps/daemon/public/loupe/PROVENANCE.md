@@ -28,3 +28,33 @@ To refresh:
       --outDir <potato-cannon>/apps/daemon/public/loupe --emptyOutDir
 
 then restore this file, which the build's --emptyOutDir removes.
+
+## Hand edits in this vendored copy, 2026-09-20
+
+Two changes were made here by hand, in the built bundle, and **a rebuild by the
+command above will erase them.** They are written down because a silent loss is the
+likeliest way this goes wrong.
+
+1. **The field opens expanded.** The `O` flag that tracks the expanded state starts
+   true rather than false. The collapse control is untouched, so a reader can still
+   fold it.
+2. **The descent nodes are coloured by their own stage, from the palette.** Every
+   inline hex in the descent SVG generator is gone, replaced by `var(--ok)`,
+   `var(--brand-accent)`, `var(--debt)`, `var(--gap)` and `var(--muted)` through
+   inline `style`, because a `var()` in a presentation attribute does not resolve.
+   The three nodes are intent at `cy=8`, build at `cy=40`, proof at `cy=72`:
+
+   | Row state | intent | build | proof | stroke |
+   |---|---|---|---|---|
+   | `proven` | `--ok` | `--ok` | `--ok` | `--muted` |
+   | `tracked-debt` | `--ok` | `--debt` | `--debt`, hollow | `--muted` |
+   | `backlog` | `--brand-accent` | `--muted` | `--muted` | `--muted` |
+   | `GAP`, build earned | `--ok` | `--ok` | `--gap` | `--muted` |
+   | `GAP`, nothing built | `--ok` | `--gap` | | `--muted` |
+
+   Before this the stroke was `#e8bd52`, the palette's `--gold`, on proven, tracked
+   debt and backlog alike, which is what read as a warning colour on rows that were
+   nothing of the kind.
+
+Both belong in Loupe's own source, and are docketed there. Until that lands, a
+refresh of this directory has to re-apply them.
