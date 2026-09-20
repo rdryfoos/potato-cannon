@@ -1,6 +1,6 @@
 import type Database from "better-sqlite3";
 
-const CURRENT_SCHEMA_VERSION = 14;
+const CURRENT_SCHEMA_VERSION = 15;
 
 /**
  * Run database migrations.
@@ -63,6 +63,10 @@ export function runMigrations(db: Database.Database): void {
 
   if (version < 14) {
     migrateV14(db);
+  }
+
+  if (version < 15) {
+    migrateV15(db);
   }
 
   db.pragma(`user_version = ${CURRENT_SCHEMA_VERSION}`);
@@ -573,5 +577,20 @@ function migrateV14(db: Database.Database): void {
   }
   if (!columns.some((c) => c.name === "blocked_at")) {
     db.exec(`ALTER TABLE tickets ADD COLUMN blocked_at TEXT`);
+  }
+}
+
+/**
+ * V15: Add actor to ticket_history. Every phase transition records who caused it:
+ * a hand, the daemon advancing a card on its own, or a named hook. Before this the
+ * history said only that a card moved, so a board could not tell a human's decision
+ * from the machine's, and an estate writing its own account of a card had nothing to
+ * read. Null on rows written before this migration, which is honest: those transitions
+ * were not recorded with an actor and guessing one now would be invention.
+ */
+function migrateV15(db: Database.Database): void {
+  const columns = db.pragma("table_info(ticket_history)") as { name: string }[];
+  if (!columns.some((c) => c.name === "actor")) {
+    db.exec(`ALTER TABLE ticket_history ADD COLUMN actor TEXT`);
   }
 }

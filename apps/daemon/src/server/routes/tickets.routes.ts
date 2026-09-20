@@ -139,18 +139,37 @@ export function registerTicketRoutes(
   });
 
   // Update ticket
+  /**
+   * "hook:<name>" when a caller declares itself one, "hand:<user>" otherwise. The name
+   * is bounded and scrubbed so nothing a caller sends can be mistaken for something the
+   * daemon decided.
+   */
+  function resolveActor(declared?: string): string {
+    const m = /^hook:([A-Za-z0-9][A-Za-z0-9._-]{0,39})$/.exec((declared ?? "").trim());
+    if (m) return `hook:${m[1]}`;
+    const user = (process.env.USER || process.env.LOGNAME || "unknown").replace(/[^A-Za-z0-9._-]/g, "");
+    return `hand:${user || "unknown"}`;
+  }
+
   app.put("/api/tickets/:project/:id", async (req: Request, res: Response) => {
     try {
       const projectId = decodeURIComponent(req.params.project);
       const ticketId = req.params.id;
-      const { force, ...ticketUpdates } = req.body as {
+      const { force, actor: declaredActor, ...ticketUpdates } = req.body as {
         phase?: TicketPhase;
         sessionId?: string;
         force?: boolean;
         blocked?: boolean;
         title?: string;
         description?: string;
+        actor?: string;
       };
+
+      // Who is causing this move. A caller that is not a hand says so, and the only
+      // callers that may are the estate's own hooks, which name themselves. Anything
+      // else is a hand: this API has no other kind of caller, and the hand is the
+      // account the daemon runs as.
+      const actor = resolveActor(declaredActor);
 
       const oldTicket = await getTicket(projectId, ticketId);
       const oldPhase = oldTicket.phase;
@@ -179,6 +198,7 @@ export function registerTicketRoutes(
           ticketId,
           fromPhase: oldPhase,
           toPhase: resolvedPhase,
+          actor,
         });
         if (entry && !entry.allowed) {
           res.status(409).json({
@@ -208,7 +228,7 @@ export function registerTicketRoutes(
       const ticket = await updateTicket(projectId, ticketId, {
         ...ticketUpdates,
         phase: resolvedPhase,
-        ...(resolvedPhase && resolvedPhase !== oldPhase ? { pendingPhase: null } : {}),
+        ...(resolvedPhase && resolvedPhase !== oldPhase ? { pendingPhase: null, actor } : {}),
       });
 
       eventBus.emit("ticket:updated", { projectId, ticket });
