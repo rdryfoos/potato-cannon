@@ -1,12 +1,18 @@
+// First, before anything that reads config/paths.js: a Cannon home of this run's own.
+// This file used to build its fixture paths from the developer's real home rather
+// than from where the daemon was told to look, so a test run wrote into a live
+// installation beside real project data. Two runs at once deleted each other's
+// fixtures, and the cleanup swallowed its own errors, so the only trace was
+// directories left behind.
+import { TEST_HOME, removeTestHome } from "../../stores/__tests__/helpers/test-home.js";
+
 import { describe, it, before, after, beforeEach } from "node:test";
 import assert from "node:assert";
 import fs from "fs/promises";
 import path from "path";
-import os from "os";
 
 describe("projects agent override routes", () => {
-  const homeDir = os.homedir();
-  const potatoDir = path.join(homeDir, ".potato-cannon");
+  const potatoDir = TEST_HOME;
   const projectId = "test-agent-routes-" + Date.now();
   let testProjectDir: string;
 
@@ -83,3 +89,5 @@ describe("projects agent override routes", () => {
     });
   });
 });
+
+after(removeTestHome);

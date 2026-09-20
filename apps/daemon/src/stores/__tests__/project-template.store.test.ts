@@ -1,14 +1,21 @@
+// First, before anything that reads config/paths.js: a Cannon home of this run's own.
+// Until 2026-09-20 this file wrote its fixtures into the developer's live
+// ~/.potato-cannon, beside real project data, because it built its paths from
+// os.homedir() rather than from where the daemon was told to look. Two suite runs at
+// once deleted each other's fixtures, and this file failed for reasons no commit
+// explained: the cleanup swallowed its own errors, so the only trace was directories
+// left behind in a live installation. Twenty-four had accumulated by then.
+import { TEST_HOME, removeTestHome } from "./helpers/test-home.js";
+
 import { describe, it, before, after, beforeEach } from "node:test";
 import assert from "node:assert";
 import fs from "fs/promises";
 import path from "path";
-import os from "os";
 
 describe("project-template.store", () => {
   describe("hasProjectAgentOverride", () => {
     let testProjectDir: string;
-    const homeDir = os.homedir();
-    const potatoDir = path.join(homeDir, ".potato-cannon");
+    const potatoDir = TEST_HOME;
     const projectId = "test-override-check-" + Date.now();
 
     before(async () => {
@@ -47,8 +54,7 @@ describe("project-template.store", () => {
 
   describe("getProjectAgentOverride", () => {
     let testProjectDir: string;
-    const homeDir = os.homedir();
-    const potatoDir = path.join(homeDir, ".potato-cannon");
+    const potatoDir = TEST_HOME;
     const projectId = "test-override-read-" + Date.now();
 
     before(async () => {
@@ -86,8 +92,7 @@ describe("project-template.store", () => {
   });
 
   describe("saveProjectAgentOverride", () => {
-    const homeDir = os.homedir();
-    const potatoDir = path.join(homeDir, ".potato-cannon");
+    const potatoDir = TEST_HOME;
     const projectId = "test-save-override-" + Date.now();
 
     after(async () => {
@@ -116,8 +121,7 @@ describe("project-template.store", () => {
   });
 
   describe("deleteProjectAgentOverride", () => {
-    const homeDir = os.homedir();
-    const potatoDir = path.join(homeDir, ".potato-cannon");
+    const potatoDir = TEST_HOME;
     const projectId = "test-delete-override-" + Date.now();
 
     before(async () => {
@@ -149,3 +153,5 @@ describe("project-template.store", () => {
     });
   });
 });
+
+after(removeTestHome);
