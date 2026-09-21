@@ -21,9 +21,30 @@ export interface TicketPendingResponse {
   question?: TicketPendingQuestion
 }
 
+/**
+ * Who said a thing, as the Activity feed needs to show it.
+ *
+ * `type` is the shape of a message and has never been its author: a phase
+ * worker's question, the Q&A agent's answer and the daemon's own notice were
+ * three speakers wearing two bubbles. `kind` picks the colour and the side;
+ * `name` is the caption, because "Spec worker" and "Build worker" are the same
+ * kind and are not the same speaker.
+ */
+export type SpeakerKind = 'person' | 'worker' | 'buddy' | 'cannon'
+
+export interface MessageSpeaker {
+  kind: SpeakerKind
+  name: string
+}
+
 export interface TicketMessage {
   type: 'question' | 'user' | 'notification' | 'artifact'
   text: string
+  /**
+   * Present on every message the daemon returns. The store fills it in for rows
+   * written before speakers existed, by inference from what those rows carry.
+   */
+  speaker?: MessageSpeaker
   conversationId?: string
   options?: string[]
   timestamp: string

@@ -1,6 +1,6 @@
 import type Database from "better-sqlite3";
 
-const CURRENT_SCHEMA_VERSION = 15;
+const CURRENT_SCHEMA_VERSION = 16;
 
 /**
  * Run database migrations.
@@ -67,6 +67,10 @@ export function runMigrations(db: Database.Database): void {
 
   if (version < 15) {
     migrateV15(db);
+  }
+
+  if (version < 16) {
+    migrateV16(db);
   }
 
   db.pragma(`user_version = ${CURRENT_SCHEMA_VERSION}`);
@@ -592,5 +596,34 @@ function migrateV15(db: Database.Database): void {
   const columns = db.pragma("table_info(ticket_history)") as { name: string }[];
   if (!columns.some((c) => c.name === "actor")) {
     db.exec(`ALTER TABLE ticket_history ADD COLUMN actor TEXT`);
+  }
+}
+
+/**
+ * V16: who said it.
+ *
+ * conversation_messages has carried a `type` since V3 and nothing else about its
+ * author. `type` says what shape a message is, not who produced it, so three
+ * different speakers arrived as the same bubble: a phase worker's chat_ask, the
+ * ticket Q&A agent's chat_ask, and an artifact chat's, all rendered identically
+ * and all captioned with the same name. A reader scrolling a card could not tell
+ * a worker's guess from the daemon's fact.
+ *
+ * speaker_kind is the role: person, worker, buddy or cannon. speaker_name is what
+ * the feed calls it, because "Spec worker" and "Build worker" are the same kind
+ * and are not the same speaker.
+ *
+ * Both are null on every row written before this migration. That is deliberate and
+ * it is not a gap to backfill: those rows were never recorded with an author, and
+ * writing one in now would be inventing history. The store labels them on read
+ * from what they do carry, and says plainly, in one place, that it is inferring.
+ */
+function migrateV16(db: Database.Database): void {
+  const columns = db.pragma("table_info(conversation_messages)") as { name: string }[];
+  if (!columns.some((c) => c.name === "speaker_kind")) {
+    db.exec(`ALTER TABLE conversation_messages ADD COLUMN speaker_kind TEXT`);
+  }
+  if (!columns.some((c) => c.name === "speaker_name")) {
+    db.exec(`ALTER TABLE conversation_messages ADD COLUMN speaker_name TEXT`);
   }
 }
