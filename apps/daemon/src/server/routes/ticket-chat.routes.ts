@@ -14,6 +14,7 @@ import { addMessage } from "../../stores/conversation.store.js";
 import { tryLoadAgentDefinition } from "../../services/session/index.js";
 import { runAdhocChatProcess, buildAdhocChatArgs } from "../../services/session/adhoc-chat-runner.js";
 import { eventBus } from "../../utils/event-bus.js";
+import { callerSpeaker } from "../../services/speaker.js";
 import type { SessionService } from "../../services/session/index.js";
 import type { Project } from "../../types/config.types.js";
 
@@ -43,7 +44,7 @@ export function registerTicketChatRoutes(
       try {
         const projectId = decodeURIComponent(req.params.project);
         const ticketId = req.params.ticket;
-        const { message } = req.body as { message?: string };
+        const { message, origin } = req.body as { message?: string; origin?: string };
 
         if (!message) {
           res.status(400).json({ error: "Missing message" });
@@ -106,7 +107,7 @@ export function registerTicketChatRoutes(
         // frontend's optimistic local update, then silently vanished the
         // moment the agent's answer arrived and the UI refetched real
         // server-side history: the question was never actually in it.
-        persistUserMessage(ticket.conversationId, projectId, ticketId, message);
+        persistUserMessage(ticket.conversationId, projectId, ticketId, message, origin);
 
         await spawnTicketChatSession(session, prompt, project.path, projectId, ticketId);
 
@@ -172,9 +173,10 @@ export function registerTicketChatRoutes(
     async (req: Request, res: Response) => {
       try {
         const projectId = decodeURIComponent(req.params.project);
-        const { contextId, message } = req.body as {
+        const { contextId, message, origin } = req.body as {
           contextId?: string;
           message?: string;
+          origin?: string;
         };
 
         if (!contextId || !message) {
@@ -215,7 +217,7 @@ export function registerTicketChatRoutes(
         // into real history too, not just handed to the agent as --print
         // text.
         const ticket = await getTicket(projectId, session.ticketId);
-        persistUserMessage(ticket.conversationId, projectId, session.ticketId, message);
+        persistUserMessage(ticket.conversationId, projectId, session.ticketId, message, origin);
 
         await resumeTicketChatSession(
           session,
@@ -371,21 +373,31 @@ async function resumeTicketChatSession(
   runAdhocChatProcess(session, args, projectPath, projectId, ticketId, "ticket-qa", meta);
 }
 
-// Saves the user's actual typed message into the ticket's real conversation
+// Saves the message this route was handed into the ticket's real conversation
 // and emits the same event the general ticket box's /comments route does,
 // so it shows up immediately via the existing useTicketMessage SSE
 // subscription in ActivityTab - not just as text handed to the agent.
+//
+// It is labelled by where it came from. This route is open to anything that can
+// reach the daemon, and until now everything it received was written as a `user`
+// message: a script posting to it, or one agent asking another, appeared in the
+// feed as the person sitting at the board, in the person's own bubble, on the
+// person's own side. The panel says it is the panel and is the person. Nothing
+// else is, and a caller that names itself is named; a caller that does not is
+// called an unnamed caller, which is the true thing to call it.
 function persistUserMessage(
   conversationId: string | undefined,
   projectId: string,
   ticketId: string,
-  message: string
+  message: string,
+  origin?: string
 ): void {
   if (!conversationId) return;
-  const saved = addMessage(conversationId, { type: "user", text: message });
+  const speaker = callerSpeaker(origin);
+  const saved = addMessage(conversationId, { type: "user", text: message, speaker });
   eventBus.emit("ticket:message", {
     projectId,
     ticketId,
-    message: { type: "user", text: saved.text, timestamp: saved.timestamp },
+    message: { type: "user", text: saved.text, timestamp: saved.timestamp, speaker },
   });
 }

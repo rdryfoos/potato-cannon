@@ -117,13 +117,21 @@ The dev server proxies `/api/*` and `/events/*` to the Potato Cannon daemon runn
 - REST API: `/api/*`
 - Server-Sent Events: `/events/*`
 
-## Known test failures (as of 2026-08-04)
+## Known test failures
 
-`pnpm test` currently has 32 pre-existing failures across 4 files, unrelated to any Blocked/Brainstorm-status removal work - noting this so nobody burns time assuming they caused it:
+None, as of 2026-09-20. `pnpm -r test` is green: 604 daemon tests, 154 frontend
+tests and 3 skipped.
 
-- `src/components/board/BrainstormCard.test.tsx` (8 failures) - `TypeError: Cannot read properties of undefined (reading 'getItem')` in `BrainstormCard.tsx`'s `useState` initializer. `localStorage` isn't available in the test environment.
-- `src/hooks/usePendingQuestions.test.ts` (7 failures) - same `localStorage` root cause.
-- `src/stores/appStore.test.ts` (14 failures, `pendingTickets`/`ticketActivity` suites) - not yet root-caused; likely related to the same in-progress ticket-chat/pending-question work these stores support.
-- `src/components/ticket-detail/ActivityTab.test.tsx` (2 failures) - assertions expect placeholder text ("No agent is running...") that doesn't match the component's current implementation.
+The note that stood here listed 32 frontend failures from 2026-08-04, across
+`BrainstormCard.test.tsx`, `usePendingQuestions.test.ts`, `appStore.test.ts` and
+`ActivityTab.test.tsx`. Thirty of them were fixed in the work that followed and
+the note was never updated, so it went on telling every newcomer to expect a red
+suite. The last two were in `ActivityTab.test.tsx`: they asserted that the box
+was disabled and said "No agent is running for this phase" when no phase agent
+was running, which the ticket-wide Q&A feature had already replaced. They were
+not flaky and they were not someone else's problem; they described a component
+that no longer existed, and they are now rewritten to assert what it does.
 
-All four sit inside the still-in-progress ticket-wide Q&A feature (`ticket-chat.routes.ts`, `adhoc-chat-runner.ts`, and related `ActivityTab`/`appStore` changes) - whoever picks that work back up will want to fix these as part of finishing it, most likely by adding a `localStorage` polyfill/mock to the test setup first.
+A red line in a suite that everyone has agreed to ignore stops being a signal,
+which is the whole reason a suite exists. If this section grows a list again, the
+list is the bug.

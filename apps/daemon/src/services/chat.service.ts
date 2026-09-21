@@ -21,6 +21,8 @@ import {
   createWaitController,
 } from "../stores/chat.store.js";
 import { appendTicketLog } from "../stores/ticket-log.store.js";
+import { workerSpeaker, PERSON } from "./speaker.js";
+import type { MessageSpeaker } from "../types/conversation.types.js";
 import { eventBus } from "../utils/event-bus.js";
 import {
   addMessage,
@@ -130,6 +132,7 @@ export class ChatService {
         text: question,
         options,
         metadata,
+        speaker: this.getSpeaker(context, phase),
       });
       questionMessageId = message.id;
     }
@@ -223,6 +226,7 @@ export class ChatService {
       addMessage(conversationId, {
         type: "user",
         text: mappedAnswer,
+        speaker: PERSON,
       });
     }
 
@@ -278,6 +282,7 @@ export class ChatService {
         text: question,
         options,
         metadata,
+        speaker: this.getSpeaker(context, phase),
       });
       questionMessageId = message.id;
     }
@@ -359,9 +364,14 @@ export class ChatService {
     // Get conversation ID and persist notification
     const conversationId = this.getConversationId(context);
     if (conversationId) {
+      // chat_notify is an agent saying what it did. It is not the Cannon: the
+      // daemon's own notices are written by the daemon and say Cannon. Before this
+      // the two were the same grey bubble captioned "Status Update", so the board
+      // could not tell a worker's account of itself from a fact the machine knew.
       addMessage(conversationId, {
         type: "notification",
         text: message,
+        speaker: this.getSpeaker(context),
       });
     }
 
@@ -442,6 +452,7 @@ export class ChatService {
         addMessage(conversationId, {
           type: "user",
           text: answer,
+          speaker: PERSON,
         });
 
         if (context.brainstormId) {
@@ -561,6 +572,28 @@ export class ChatService {
   // persistence of its own - see ArtifactChat.tsx) had no way to recover
   // its own history on reopen. Tagging the message with which artifact (if
   // any) the session is scoped to lets the panel fetch and filter by it.
+  /**
+   * Which agent is talking, for a message about to be written.
+   *
+   * The session already knows: it was created with an agent_source, and an ad-hoc
+   * Q&A session's source is the literal "ticket-qa". That is the only honest place
+   * to read it from, and it costs one indexed lookup per message rather than a
+   * guess per render. A message written with no live session, which happens when a
+   * provider relays one, falls back to the phase, and says "A worker" if it has
+   * neither rather than naming a worker it cannot identify.
+   */
+  private getSpeaker(context: ChatContext, phase?: string): MessageSpeaker {
+    const adhoc = this.getAdhocChatMetadata(context);
+    if (adhoc?.ticketChat === true) return workerSpeaker("ticket-qa");
+    if (typeof adhoc?.artifactFilename === "string") return workerSpeaker("artifact-qa");
+
+    if (context.ticketId) {
+      const session = getActiveSessionForTicket(context.ticketId);
+      if (session) return workerSpeaker(session.agentSource, phase ?? session.phase);
+    }
+    return workerSpeaker(null, phase);
+  }
+
   private getAdhocChatMetadata(context: ChatContext): Record<string, unknown> | undefined {
     if (!context.brainstormId) return undefined;
     const session = artifactChatStore.getSession(context.brainstormId);

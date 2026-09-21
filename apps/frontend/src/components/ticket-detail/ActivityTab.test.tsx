@@ -55,6 +55,9 @@ vi.mock('@/api/client', () => ({
     respondToQuestion: vi.fn(),
     sendTicketInput: vi.fn().mockResolvedValue({}),
     getTicket: vi.fn().mockResolvedValue({ phase: 'Build' }),
+    startTicketChat: vi.fn().mockResolvedValue({ contextId: 'ticketchat_1' }),
+    sendTicketChatInput: vi.fn().mockResolvedValue({ ok: true }),
+    endTicketChat: vi.fn().mockResolvedValue({ ok: true }),
   },
 }))
 
@@ -148,12 +151,17 @@ describe('ActivityTab - Disabled Input When No Agent Active', () => {
     cleanup()
   })
 
-  it('disables textarea when no agent is active', () => {
+  // These two asserted a dead behaviour for a month: the box used to be disabled
+  // when no phase agent was running and to say so. The ticket-wide Q&A feature
+  // replaced that - with no agent running the box asks the Q&A agent instead - and
+  // the tests were never brought along, so the suite carried two permanent
+  // failures describing a component that no longer existed.
+  it('leaves the textarea usable when no phase agent is active, because the Q&A agent answers', () => {
     render(<ActivityTab projectId="test-project" ticketId="POT-1" />)
 
-    const textarea = screen.getByPlaceholderText('No agent is running for this phase')
+    const textarea = screen.getByPlaceholderText('Ask about this ticket...')
     expect(textarea).toBeTruthy()
-    expect((textarea as HTMLTextAreaElement).disabled).toBe(true)
+    expect((textarea as HTMLTextAreaElement).disabled).toBe(false)
   })
 
   it('disables send button when no agent is active', () => {
@@ -197,11 +205,15 @@ describe('ActivityTab - Disabled Input When No Agent Active', () => {
     expect((sendButton as HTMLButtonElement).disabled).toBe(false)
   })
 
-  it('shows explanatory placeholder when no agent is active', () => {
+  it('says what the box does when no phase agent is active', () => {
     render(<ActivityTab projectId="test-project" ticketId="POT-1" />)
 
-    const textarea = screen.getByPlaceholderText('No agent is running for this phase')
-    expect(textarea).toBeTruthy()
+    expect(screen.getByPlaceholderText('Ask about this ticket...')).toBeTruthy()
+    expect(
+      screen.getByText(
+        'No agent running - this asks a Q&A agent about the ticket, not a phase agent'
+      )
+    ).toBeTruthy()
   })
 
   it('shows normal placeholder when agent is active', () => {
@@ -314,5 +326,125 @@ describe('ActivityTab - Session Ended Clears Waiting State', () => {
     await waitFor(() => {
       expect(screen.queryByText('Thinking')).toBeNull()
     })
+  })
+})
+
+describe('ActivityTab - every message names its speaker', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockIsTicketProcessing.mockReturnValue(false)
+    mockIsTicketPending.mockReturnValue(false)
+  })
+
+  afterEach(() => {
+    cleanup()
+    mockUseQueryReturnValue = { data: [], isLoading: false }
+  })
+
+  // One feed holding all four kinds, which is the thing that was impossible to
+  // read before: two of these four used to be the same purple bubble captioned
+  // "Potato", and a third was a grey one captioned "Status Update".
+  const feed = [
+    {
+      type: 'question',
+      text: 'Which of these do you want?',
+      timestamp: '2026-09-21T01:48:48Z',
+      speaker: { kind: 'worker', name: 'Spec worker' },
+    },
+    {
+      type: 'user',
+      text: 'A. Defaults accepted.',
+      timestamp: '2026-09-21T01:49:24Z',
+      speaker: { kind: 'person', name: 'You' },
+    },
+    {
+      type: 'question',
+      text: 'The manifest says AC-UI-30 is backlog.',
+      timestamp: '2026-09-21T01:52:00Z',
+      speaker: { kind: 'buddy', name: 'Buddy' },
+    },
+    {
+      type: 'notification',
+      text: 'Ticket blocked automatically: entry check exited 1',
+      timestamp: '2026-09-21T01:53:00Z',
+      speaker: { kind: 'cannon', name: 'Cannon' },
+    },
+  ]
+
+  it('names all four speakers in one feed', () => {
+    mockUseQueryReturnValue = { data: feed, isLoading: false }
+
+    render(<ActivityTab projectId="test-project" ticketId="POT-1" />)
+
+    expect(screen.getByText('Spec worker')).toBeTruthy()
+    expect(screen.getByText('You')).toBeTruthy()
+    expect(screen.getByText('Buddy')).toBeTruthy()
+    expect(screen.getByText('Cannon')).toBeTruthy()
+  })
+
+  it('gives each kind its own colour and the person alone the right-hand side', () => {
+    mockUseQueryReturnValue = { data: feed, isLoading: false }
+
+    const { container } = render(<ActivityTab projectId="test-project" ticketId="POT-1" />)
+
+    const bubbleFor = (kind: string) =>
+      container.querySelector(`[data-speaker="${kind}"]`)!.closest('div.max-w-\\[85\\%\\]')!
+
+    expect(bubbleFor('person').className).toContain('bg-accent/50')
+    expect(bubbleFor('worker').className).toContain('bg-bg-secondary')
+    expect(bubbleFor('buddy').className).toContain('bg-accent-purple/10')
+    expect(bubbleFor('cannon').className).toContain('bg-accent-yellow/10')
+
+    // Four different bubbles, not one class reused.
+    const classes = ['person', 'worker', 'buddy', 'cannon'].map((k) => bubbleFor(k).className)
+    expect(new Set(classes).size).toBe(4)
+
+    const rowFor = (kind: string) => bubbleFor(kind).parentElement!
+    expect(rowFor('person').className).toContain('justify-end')
+    for (const kind of ['worker', 'buddy', 'cannon']) {
+      expect(rowFor(kind).className).toContain('justify-start')
+    }
+  })
+
+  it('tells two workers apart rather than calling both of them the agent', () => {
+    mockUseQueryReturnValue = {
+      data: [
+        { type: 'question', text: 'a', timestamp: '1', speaker: { kind: 'worker', name: 'Spec worker' } },
+        { type: 'question', text: 'b', timestamp: '2', speaker: { kind: 'worker', name: 'Build worker' } },
+        { type: 'notification', text: 'c', timestamp: '3', speaker: { kind: 'worker', name: 'Gate runner' } },
+      ],
+      isLoading: false,
+    }
+
+    render(<ActivityTab projectId="test-project" ticketId="POT-1" />)
+
+    expect(screen.getByText('Spec worker')).toBeTruthy()
+    expect(screen.getByText('Build worker')).toBeTruthy()
+    expect(screen.getByText('Gate runner')).toBeTruthy()
+    expect(screen.queryByText('Potato')).toBeNull()
+    expect(screen.queryByText('Status Update')).toBeNull()
+  })
+
+  it('shows a caller that is not the panel as that caller, not as the person', () => {
+    mockUseQueryReturnValue = {
+      data: [
+        {
+          type: 'user',
+          text: 'posted by a script',
+          timestamp: '1',
+          speaker: { kind: 'cannon', name: 'An unnamed caller' },
+        },
+      ],
+      isLoading: false,
+    }
+
+    const { container } = render(<ActivityTab projectId="test-project" ticketId="POT-1" />)
+
+    expect(screen.getByText('An unnamed caller')).toBeTruthy()
+    // Not in the person's bubble and not on the person's side, even though the
+    // message's type is still "user".
+    const bubble = container.querySelector('[data-speaker="cannon"]')!.closest('div.max-w-\\[85\\%\\]')!
+    expect(bubble.className).not.toContain('bg-accent/50')
+    expect(bubble.parentElement!.className).toContain('justify-start')
   })
 })
