@@ -33,6 +33,7 @@ import { getWipStatus } from "../../services/session/wip.js";
 import { checkPhaseEntry } from "../../services/session/entry-check.js";
 import { chatService } from "../../services/chat.service.js";
 import { applyEdit } from "../../services/card-description.js";
+import { CANNON, callerSpeaker } from "../../services/speaker.js";
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -485,6 +486,7 @@ export function registerTicketRoutes(
           addMessage(ticket.conversationId, {
             type: "notification",
             text: note,
+            speaker: CANNON,
           });
         }
 
@@ -725,7 +727,11 @@ export function registerTicketRoutes(
       try {
         const projectId = decodeURIComponent(req.params.project);
         const ticketId = req.params.id;
-        const { comment, type } = req.body as { comment?: string; type?: string };
+        const { comment, type, origin } = req.body as {
+          comment?: string;
+          type?: string;
+          origin?: string;
+        };
 
         if (!comment || !comment.trim()) {
           res.status(400).json({ error: "Missing comment" });
@@ -745,15 +751,29 @@ export function registerTicketRoutes(
           return;
         }
 
+        // A comment posted here is either the panel's box or something calling the
+        // API. Same rule as the Q&A route: the panel is the person, anything else
+        // says what it is. An agent posting a note through add_ticket_comment sends
+        // type "notification" and is a worker saying something, not a person.
+        const commentSpeaker =
+          messageType === "notification"
+            ? { kind: "worker" as const, name: "A worker" }
+            : callerSpeaker(origin);
         const message = addMessage(ticket.conversationId, {
           type: messageType,
           text: comment.trim(),
+          speaker: commentSpeaker,
         });
 
         eventBus.emit("ticket:message", {
           projectId,
           ticketId,
-          message: { type: messageType, text: message.text, timestamp: message.timestamp },
+          message: {
+            type: messageType,
+            text: message.text,
+            timestamp: message.timestamp,
+            speaker: commentSpeaker,
+          },
         });
 
         res.json({ success: true, message });

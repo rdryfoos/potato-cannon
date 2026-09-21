@@ -68,6 +68,7 @@ import {
 import { formatTaskContext } from "./loops/task-loop.js";
 import { getPendingVerdict } from "../../server/routes/ralph.routes.js";
 import { isPhaseAtWipLimit } from "./wip.js";
+import { CANNON, PERSON } from "../speaker.js";
 
 const MAX_RECENT_ACTIVITY_MESSAGE_LENGTH = 2000;
 
@@ -1395,9 +1396,12 @@ export class SessionService {
       const pendingQuestion = getPendingQuestion(ticket.conversationId);
       if (pendingQuestion) {
         answerQuestion(pendingQuestion.id);
+        // The one caller of this path is the panel's reply box, answering a
+        // question the card is suspended on. That is the person.
         addMessage(ticket.conversationId, {
           type: "user",
           text: userResponse,
+          speaker: PERSON,
         });
 
         // Emit SSE event for the user's response
@@ -1580,6 +1584,7 @@ export class SessionService {
       addMessage(currentTicket.conversationId, {
         type: "notification",
         text: `Ticket blocked automatically: ${reason}`,
+        speaker: CANNON,
       });
     }
 

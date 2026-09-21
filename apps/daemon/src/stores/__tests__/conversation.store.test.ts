@@ -50,6 +50,70 @@ describe("ConversationStore", () => {
     db.prepare("DELETE FROM conversations").run();
   });
 
+  describe("speakers", () => {
+    it("round-trips the speaker a caller names", () => {
+      const conv = store.createConversation(projectId);
+      const msg = store.addMessage(conv.id, {
+        type: "question",
+        text: "Which of these do you want?",
+        speaker: { kind: "worker", name: "Spec worker" },
+      });
+
+      assert.deepStrictEqual(msg.speaker, { kind: "worker", name: "Spec worker" });
+      assert.deepStrictEqual(store.getMessage(msg.id)!.speaker, {
+        kind: "worker",
+        name: "Spec worker",
+      });
+    });
+
+    it("keeps two speakers of the same kind apart", () => {
+      const conv = store.createConversation(projectId);
+      store.addMessage(conv.id, {
+        type: "notification",
+        text: "spec written",
+        speaker: { kind: "worker", name: "Spec worker" },
+      });
+      store.addMessage(conv.id, {
+        type: "notification",
+        text: "tests green",
+        speaker: { kind: "worker", name: "Build worker" },
+      });
+
+      const names = store.getMessages(conv.id).map((m) => m.speaker!.name);
+      assert.deepStrictEqual(names, ["Spec worker", "Build worker"]);
+    });
+
+    it("labels a row written before V16 rather than leaving it blank", () => {
+      const conv = store.createConversation(projectId);
+      // Exactly what a pre-V16 row looks like: no speaker columns at all.
+      db.prepare(
+        `INSERT INTO conversation_messages (id, conversation_id, type, text, timestamp, metadata)
+         VALUES (?, ?, ?, ?, ?, ?)`
+      ).run(
+        "old-1",
+        conv.id,
+        "question",
+        "an old question",
+        new Date().toISOString(),
+        JSON.stringify({ phase: "Build" })
+      );
+
+      const msg = store.getMessage("old-1")!;
+      assert.strictEqual(msg.speaker!.kind, "worker");
+      assert.strictEqual(msg.speaker!.name, "Build worker");
+    });
+
+    it("does not claim an old machine row was the person", () => {
+      const conv = store.createConversation(projectId);
+      db.prepare(
+        `INSERT INTO conversation_messages (id, conversation_id, type, text, timestamp)
+         VALUES (?, ?, ?, ?, ?)`
+      ).run("old-2", conv.id, "notification", "something happened", new Date().toISOString());
+
+      assert.notStrictEqual(store.getMessage("old-2")!.speaker!.kind, "person");
+    });
+  });
+
   describe("createConversation", () => {
     it("should create a conversation with UUID", () => {
       const conv = store.createConversation(projectId);

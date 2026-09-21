@@ -229,7 +229,7 @@ export const api = {
   addTicketComment: (projectId: string, ticketId: string, comment: string) =>
     request<void>(`/api/tickets/${encodeURIComponent(projectId)}/${ticketId}/comments`, {
       method: 'POST',
-      body: JSON.stringify({ comment })
+      body: JSON.stringify({ comment, origin: 'panel' })
     }),
 
   getTicketTasks: (projectId: string, ticketId: string, phase?: string) =>
@@ -402,13 +402,19 @@ export const api = {
     ),
 
   // ============ Ticket Chat (whole-ticket Q&A, sibling of Artifact Chat) ============
+  //
+  // Both write-paths say `origin: 'panel'`. The daemon writes a message from the
+  // panel as the person and anything else as the caller it is, so this one word is
+  // what separates a person typing from a script posting. Saying it here, at the
+  // only place the panel talks to that route, keeps the claim next to the thing
+  // that can honestly make it.
 
   startTicketChat: (projectId: string, ticketId: string, message: string) =>
     request<ArtifactChatStartResponse>(
       `/api/ticket-chat/${encodeURIComponent(projectId)}/${ticketId}/start`,
       {
         method: 'POST',
-        body: JSON.stringify({ message })
+        body: JSON.stringify({ message, origin: 'panel' })
       }
     ),
 
@@ -422,7 +428,7 @@ export const api = {
       `/api/ticket-chat/${encodeURIComponent(projectId)}/${ticketId}/input`,
       {
         method: 'POST',
-        body: JSON.stringify({ contextId, message })
+        body: JSON.stringify({ contextId, message, origin: 'panel' })
       }
     ),
 

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo, type KeyboardEvent } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Send, Loader2, AlertCircle, Bell, Paperclip, Bot, Brain, ChevronUp, ChevronDown, MessageCircleQuestion } from 'lucide-react'
+import { Send, Loader2, AlertCircle, Bell, Paperclip, Bot, Brain, ChevronUp, ChevronDown, MessageCircleQuestion, User } from 'lucide-react'
 import { renderMarkdown } from '@/lib/markdown'
 import { api } from '@/api/client'
 import { Button } from '@/components/ui/button'
@@ -11,7 +11,7 @@ import { Linkify } from '@/components/ui/linkify'
 import { ArtifactViewerFull } from './ArtifactViewerFull'
 import { CollapsibleTaskPanel } from './CollapsibleTaskPanel'
 import { RestartPhaseButton } from './RestartPhaseButton'
-import type { Artifact, TicketHistoryEntry } from '@potato-cannon/shared'
+import type { Artifact, TicketHistoryEntry, MessageSpeaker } from '@potato-cannon/shared'
 import { useSessionOutput, useTicketMessage, useSessionEnded } from '@/hooks/useSSE'
 
 interface ActivityTabProps {
@@ -28,11 +28,67 @@ interface ChatMessage {
   conversationId?: string
   options?: string[]
   timestamp?: string
+  speaker?: MessageSpeaker
   artifact?: {
     filename: string
     description?: string
   }
 }
+
+/**
+ * What each kind of speaker looks like.
+ *
+ * Until now the feed had two bubbles, and `type` chose between them: anything
+ * the person said was blue and on the right, and everything else - a phase
+ * worker asking, the Q&A agent answering, the daemon reporting a fact about
+ * itself - was one of two left-hand bubbles captioned "Potato" or "Status
+ * Update". Three speakers, one name. A reader could not tell a worker's guess
+ * from the daemon's fact without knowing the machinery, which is exactly the
+ * thing a board is supposed to spare them.
+ *
+ * Four kinds, four colours, and every message says who is talking. The colours
+ * are the theme's own: accent blue for the person, the grey of the secondary
+ * surface for a worker, purple for the buddy, yellow for the Cannon.
+ */
+const SPEAKER_STYLE: Record<
+  MessageSpeaker['kind'],
+  { bubble: string; caption: string; icon: typeof Bot; align: 'left' | 'right' }
+> = {
+  person: {
+    bubble: 'bg-accent/50 text-accent-foreground rounded-br-sm',
+    caption: 'text-accent-foreground/70',
+    icon: User,
+    align: 'right',
+  },
+  worker: {
+    bubble: 'bg-bg-secondary border border-border rounded-bl-sm',
+    caption: 'text-text-muted',
+    icon: Bot,
+    align: 'left',
+  },
+  buddy: {
+    bubble: 'bg-accent-purple/10 border border-accent-purple/30 rounded-bl-sm',
+    caption: 'text-accent-purple',
+    icon: MessageCircleQuestion,
+    align: 'left',
+  },
+  cannon: {
+    bubble: 'bg-accent-yellow/10 border border-accent-yellow/30 rounded-bl-sm',
+    caption: 'text-accent-yellow',
+    icon: Bell,
+    align: 'left',
+  },
+}
+
+/**
+ * A message the server did not label, or one this component made itself.
+ *
+ * The daemon labels everything it stores, including old rows, so this is the
+ * client's own fallback for an optimistic bubble drawn before any round trip. It
+ * says "You" because the only message this component invents is one the person
+ * just typed.
+ */
+const SELF: MessageSpeaker = { kind: 'person', name: 'You' }
 
 /**
  * What the Buddy button says to open with. The behaviour lives in the estate, in
@@ -75,6 +131,10 @@ export function ActivityTab({ projectId, ticketId, currentPhase: propPhase, hist
         conversationId: msg.conversationId,
         options: msg.options,
         timestamp: msg.timestamp,
+        // The daemon names the speaker of every message, including ones written
+        // before it could. Dropping it here was how three speakers ended up
+        // sharing two bubbles for as long as they did.
+        speaker: msg.speaker,
         artifact: msg.artifact
       })) as ChatMessage[]
     },
@@ -232,7 +292,8 @@ export function ActivityTab({ projectId, ticketId, currentPhase: propPhase, hist
     const optimisticMessage: ChatMessage = {
       type: 'user',
       text: messageText,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      speaker: SELF
     }
     queryClient.setQueryData<ChatMessage[]>(
       ['ticket-messages', projectId, ticketId],
@@ -447,11 +508,16 @@ function needsCollapse(text?: string): boolean {
 }
 
 function MessageBubble({ message, isLast, onArtifactClick }: MessageBubbleProps) {
-  const isUser = message.type === 'user'
   const isError = message.type === 'error'
-  const isNotification = message.type === 'notification'
   const isArtifact = message.type === 'artifact'
   const isQuestion = message.type === 'question'
+
+  // An error is this component's own, about a send that failed, and belongs to
+  // nobody. Everything else has a speaker: the daemon names it, and SELF covers
+  // the optimistic bubble drawn before the daemon has seen it.
+  const speaker = message.speaker ?? SELF
+  const style = SPEAKER_STYLE[speaker.kind] ?? SPEAKER_STYLE.worker
+  const SpeakerIcon = style.icon
 
   // Only text-bearing bubbles (user/notification/question/error) collapse -
   // artifact cards are already compact. Every message starts expanded
@@ -501,34 +567,30 @@ function MessageBubble({ message, isLast, onArtifactClick }: MessageBubbleProps)
     <div
       className={cn(
         'flex',
-        isUser ? 'justify-end' : 'justify-start'
+        !isError && style.align === 'right' ? 'justify-end' : 'justify-start'
       )}
     >
       <div
         className={cn(
           'max-w-[85%] rounded-lg px-4 py-3 leading-normal',
-          isUser && 'bg-accent/50 text-accent-foreground rounded-br-sm',
-          isQuestion && 'bg-accent-purple/10 rounded-bl-sm',
-          isNotification && 'bg-bg-secondary border border-border rounded-bl-sm',
+          !isError && style.bubble,
           isError && 'bg-destructive/10 border border-destructive/20 text-destructive'
         )}
       >
-        {isQuestion && (
-          <div className="flex items-center gap-2 mb-2 text-text-muted">
-            <Bot className="h-3 w-3" />
-            <span className="text-xs font-medium">Potato</span>
-          </div>
-        )}
-        {isNotification && (
-          <div className="flex items-center gap-2 mb-1 text-text-muted">
-            <Bell className="h-3 w-3" />
-            <span className="text-xs font-medium">Status Update</span>
-          </div>
-        )}
-        {isError && (
+        {isError ? (
           <div className="flex items-center gap-2 mb-1">
             <AlertCircle className="h-4 w-4" />
             <span className="text-xs font-medium">Error</span>
+          </div>
+        ) : (
+          // Every message says who said it, the person included. The feed used to
+          // leave the person's bubble uncaptioned and caption three different
+          // machines with one of two names; naming all four is the point.
+          <div className={cn('flex items-center gap-2 mb-2', style.caption)}>
+            <SpeakerIcon className="h-3 w-3" />
+            <span className="text-xs font-medium" data-speaker={speaker.kind}>
+              {speaker.name}
+            </span>
           </div>
         )}
         <div className={cn(collapsible && !isExpanded && 'max-h-[100px] overflow-hidden')}>

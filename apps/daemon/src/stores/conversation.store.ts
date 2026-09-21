@@ -1,10 +1,12 @@
 import type Database from "better-sqlite3";
 import { randomUUID } from "crypto";
 import { getDatabase } from "./db.js";
+import { inferSpeaker } from "../services/speaker.js";
 import type {
   Conversation,
   ConversationMessage,
   CreateMessageInput,
+  SpeakerKind,
 } from "../types/conversation.types.js";
 
 // =============================================================================
@@ -27,6 +29,8 @@ interface MessageRow {
   timestamp: string;
   answered_at: string | null;
   metadata: string | null;
+  speaker_kind: string | null;
+  speaker_name: string | null;
 }
 
 // =============================================================================
@@ -43,6 +47,7 @@ function rowToConversation(row: ConversationRow): Conversation {
 }
 
 function rowToMessage(row: MessageRow): ConversationMessage {
+  const metadata = row.metadata ? JSON.parse(row.metadata) : undefined;
   return {
     id: row.id,
     conversationId: row.conversation_id,
@@ -51,7 +56,15 @@ function rowToMessage(row: MessageRow): ConversationMessage {
     options: row.options ? JSON.parse(row.options) : undefined,
     timestamp: row.timestamp,
     answeredAt: row.answered_at || undefined,
-    metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
+    metadata,
+    // Rows written before V16 carry no speaker. Rather than leaving a card's whole
+    // history unlabelled, they are labelled from what they do carry. See
+    // inferSpeaker: it is the only place in the codebase that guesses, and it never
+    // guesses a person.
+    speaker:
+      row.speaker_kind && row.speaker_name
+        ? { kind: row.speaker_kind as SpeakerKind, name: row.speaker_name }
+        : inferSpeaker(row.type, metadata),
   };
 }
 
@@ -108,8 +121,8 @@ export class ConversationStore {
 
     this.db
       .prepare(
-        `INSERT INTO conversation_messages (id, conversation_id, type, text, options, timestamp, metadata)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO conversation_messages (id, conversation_id, type, text, options, timestamp, metadata, speaker_kind, speaker_name)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         id,
@@ -118,7 +131,9 @@ export class ConversationStore {
         input.text,
         input.options ? JSON.stringify(input.options) : null,
         now,
-        input.metadata ? JSON.stringify(input.metadata) : null
+        input.metadata ? JSON.stringify(input.metadata) : null,
+        input.speaker?.kind ?? null,
+        input.speaker?.name ?? null
       );
 
     // Update conversation's updated_at
