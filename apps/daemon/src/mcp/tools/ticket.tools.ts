@@ -23,6 +23,74 @@ export const ticketTools: ToolDefinition[] = [
     },
   },
   {
+    name: "update_ticket",
+    description:
+      "Write to the card's description without disturbing the rest of it. Use this for " +
+      "the named lines a card carries (pr, blocked-reason) and for named blocks (rework). " +
+      "Only the blocks and lines you name change; everything else on the card is left " +
+      "exactly as it was, including anything another writer put there. Pass a null text " +
+      "or value to remove one. Read the card with get_ticket first if you need to know " +
+      "what is already there.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        blocks: {
+          type: "array",
+          description:
+            "Named blocks to set or replace. A block is delimited on the card and can " +
+            "hold many lines.",
+          items: {
+            type: "object",
+            properties: {
+              name: {
+                type: "string",
+                description:
+                  'Block name, e.g. "rework". Letters, digits, dash and underscore.',
+              },
+              text: {
+                type: ["string", "null"],
+                description: "The block's contents. Null removes the block.",
+              },
+              at: {
+                type: "string",
+                enum: ["top", "bottom"],
+                description:
+                  "Where to put a block that is not on the card yet. A block that is " +
+                  "already there is replaced where it stands. Defaults to bottom.",
+              },
+            },
+            required: ["name"],
+          },
+        },
+        lines: {
+          type: "array",
+          description: 'Named "name: value" lines to set or replace.',
+          items: {
+            type: "object",
+            properties: {
+              name: {
+                type: "string",
+                description: 'Line name, e.g. "pr" or "blocked-reason".',
+              },
+              value: {
+                type: ["string", "null"],
+                description: "The line's value. Null removes the line.",
+              },
+            },
+            required: ["name"],
+          },
+        },
+        blocked: {
+          type: "boolean",
+          description:
+            "Set or clear the card's blocked field. Blocking a card silently is " +
+            "forbidden: set a blocked-reason line in the same call.",
+        },
+      },
+      required: [],
+    },
+  },
+  {
     name: "attach_artifact",
     description:
       "Attach an artifact file to the ticket. The file path should be relative to the worktree.",
@@ -221,6 +289,26 @@ async function attachArtifact(
   return { filename, type: artifactType, isNewVersion };
 }
 
+async function updateTicket(
+  ctx: McpContext,
+  body: Record<string, unknown>,
+): Promise<{ changed: string[] }> {
+  const response = await fetch(
+    `${ctx.daemonUrl}/api/tickets/${encodeURIComponent(ctx.projectId)}/${ctx.ticketId}/description`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
+  if (!response.ok) {
+    const errorBody = (await response.json().catch(() => ({}))) as { error?: string };
+    throw new Error(errorBody.error || `Failed to update ticket: ${response.statusText}`);
+  }
+  const result = (await response.json()) as { changed?: string[] };
+  return { changed: result.changed || [] };
+}
+
 async function addTicketComment(
   ctx: McpContext,
   comment: string,
@@ -302,6 +390,26 @@ export const ticketHandlers: Record<
     const ticket = await getTicket(ctx);
     return {
       content: [{ type: "text", text: JSON.stringify(ticket, null, 2) }],
+    };
+  },
+
+  update_ticket: async (ctx, args) => {
+    const { changed } = await updateTicket(ctx, {
+      blocks: args.blocks,
+      lines: args.lines,
+      blocked: args.blocked,
+    });
+    return {
+      content: [
+        {
+          type: "text",
+          // Saying what changed, rather than "ok", is what lets a worker notice that
+          // the write it thought it made did not happen.
+          text: changed.length
+            ? `Card updated: ${changed.join(", ")}. Nothing else on the description changed.`
+            : "Card unchanged: everything you passed already read that way.",
+        },
+      ],
     };
   },
 

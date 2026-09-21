@@ -84,7 +84,7 @@ const mcpConfig = {
 Tool definitions and handlers live in `src/mcp/tools/`:
 
 - `chat.tools.ts` - chat_ask, chat_notify, chat_init
-- `ticket.tools.ts` - get_ticket, create_ticket, attach_artifact, add_ticket_comment
+- `ticket.tools.ts` - get_ticket, update_ticket, create_ticket, attach_artifact, add_ticket_comment
 - `task.tools.ts` - get_task, create_task, update_task_status, add_comment_to_task
 - `artifact.tools.ts` - list_artifacts, get_artifact
 - `ralph.tools.ts` - ralph_loop_dock
@@ -92,6 +92,39 @@ Tool definitions and handlers live in `src/mcp/tools/`:
 - `index.ts` - exports allTools and allHandlers
 
 The daemon imports these directly. The proxy just forwards calls.
+
+### Ticket Tools
+
+| Tool | Description |
+| ---- | ----------- |
+| `get_ticket` | Get the current ticket's phase, title and description |
+| `update_ticket` | Targeted write to the description: named blocks and named lines |
+| `create_ticket` | Create a new ticket in the project |
+| `attach_artifact` | Attach a file to the ticket |
+| `add_ticket_comment` | Post a note into the ticket's activity feed |
+
+#### update_ticket Parameters
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `blocks` | No | `[{ name, text, at? }]` - set or replace delimited blocks. `text: null` removes one. `at` ("top"/"bottom") only places a block that is not there yet |
+| `lines` | No | `[{ name, value }]` - set or replace `name: value` lines. `value: null` removes one |
+| `blocked` | No | Set or clear the ticket's blocked field |
+
+A card's description is a document several writers share: a person's story and
+`ids:` line, a worker's `pr:` line, a robot's status block, a reader's `rework`
+block. Every writer before this one read the whole description, rebuilt it and
+wrote it back, and two writers overlapping in that window lost one of the two
+writes with nothing to show for it. `update_ticket` posts to
+`POST /api/tickets/:project/:id/description`, which does the read, the edit and the
+write inside the daemon, and changes only what it was given. It returns what it
+actually changed, so a caller that expected a change and got none can tell.
+
+Block delimiters are `<!-- name:begin -->` / `<!-- name:end -->`, the same form the
+estates' own robots already write. The edit primitives are in
+`src/services/card-description.ts` and are pure, so the awkward cases - a block a
+person hand-edited the spacing of, two names sharing a prefix, a repeated write -
+are covered by tests rather than by hope.
 
 ### Task Tools
 

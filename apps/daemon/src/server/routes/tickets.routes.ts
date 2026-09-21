@@ -32,6 +32,7 @@ import { resolveTargetPhase, getPhaseConfig } from "../../services/session/phase
 import { getWipStatus } from "../../services/session/wip.js";
 import { checkPhaseEntry } from "../../services/session/entry-check.js";
 import { chatService } from "../../services/chat.service.js";
+import { applyEdit } from "../../services/card-description.js";
 import { CANNON, callerSpeaker } from "../../services/speaker.js";
 
 const upload = multer({
@@ -642,6 +643,73 @@ export function registerTicketRoutes(
         res.json({ success: true });
       } catch (error) {
         res.status(500).json({ error: (error as Error).message });
+      }
+    },
+  );
+
+  // Targeted writes to a card's description.
+  //
+  // Every writer of a description has so far done read-modify-write across the
+  // network: GET the ticket, rebuild the whole text, PUT it back. Two writers
+  // overlapping in that window lose one of the two writes silently, and a card's
+  // description is exactly the document several writers share - a person's story
+  // and ids, a worker's `pr:` line, a robot's status block, a reader's rework
+  // request. This does the read, the edit and the write inside the daemon, so the
+  // window is gone: whatever else is on the card when the edit lands survives it.
+  //
+  // It changes only the blocks and lines it is given. A null text or value removes
+  // one. It returns what it actually changed, so a caller that expected to change
+  // something and changed nothing can tell.
+  app.post(
+    "/api/tickets/:project/:id/description",
+    async (req: Request, res: Response) => {
+      try {
+        const projectId = decodeURIComponent(req.params.project);
+        const ticketId = req.params.id;
+        const { blocks, lines, blocked } = req.body as {
+          blocks?: Array<{ name: string; text?: string | null; at?: "top" | "bottom" }>;
+          lines?: Array<{ name: string; value?: string | null }>;
+          blocked?: boolean;
+        };
+
+        if (!blocks?.length && !lines?.length && blocked === undefined) {
+          res
+            .status(400)
+            .json({ error: "Nothing to change: pass blocks, lines or blocked" });
+          return;
+        }
+
+        const ticket = await getTicket(projectId, ticketId);
+
+        let description = ticket.description || "";
+        let changed: string[] = [];
+        if (blocks?.length || lines?.length) {
+          const edit = applyEdit(description, { blocks, lines });
+          description = edit.description;
+          changed = edit.changed;
+        }
+
+        const updates: { description?: string; blocked?: boolean } = {};
+        if (description !== (ticket.description || "")) updates.description = description;
+        if (blocked !== undefined && blocked !== ticket.blocked) {
+          updates.blocked = blocked;
+          changed.push(blocked ? "blocked" : "unblocked");
+        }
+
+        if (Object.keys(updates).length === 0) {
+          res.json({ ticket, changed: [] });
+          return;
+        }
+
+        const updated = await updateTicket(projectId, ticketId, updates);
+
+        eventBus.emit("ticket:updated", { projectId, ticket: updated });
+
+        res.json({ ticket: updated, changed });
+      } catch (error) {
+        const message = (error as Error).message;
+        // A bad block or line name is the caller's mistake, not the daemon's.
+        res.status(/not a usable name/.test(message) ? 400 : 500).json({ error: message });
       }
     },
   );
