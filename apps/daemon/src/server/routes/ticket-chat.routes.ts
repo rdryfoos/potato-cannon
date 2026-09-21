@@ -10,7 +10,8 @@ import {
   clearResponse,
 } from "../../stores/chat.store.js";
 import { listArtifacts, getTicket } from "../../stores/ticket.store.js";
-import { addMessage } from "../../stores/conversation.store.js";
+import { addMessage, getMessages } from "../../stores/conversation.store.js";
+import { renderTranscript } from "../../services/transcript.js";
 import { tryLoadAgentDefinition } from "../../services/session/index.js";
 import { runAdhocChatProcess, buildAdhocChatArgs } from "../../services/session/adhoc-chat-runner.js";
 import { eventBus } from "../../utils/event-bus.js";
@@ -90,6 +91,14 @@ export function registerTicketChatRoutes(
 
         const artifacts = await listArtifacts(projectId, ticketId);
 
+        // Read the thread before the person's new message is added to it: the new
+        // message is handed over separately as the question, and a transcript that
+        // ended with the question being asked would read as though it had already
+        // been answered.
+        const transcript = renderTranscript(
+          ticket.conversationId ? getMessages(ticket.conversationId) : [],
+        );
+
         const prompt = buildTicketChatPrompt(
           agentDef.prompt,
           projectId,
@@ -98,7 +107,8 @@ export function registerTicketChatRoutes(
           ticket.description || "",
           ticket.phase,
           artifacts,
-          message
+          message,
+          transcript
         );
 
         // Persist the actual question into the ticket's real conversation -
@@ -276,7 +286,8 @@ function buildTicketChatPrompt(
   ticketDescription: string,
   ticketPhase: string,
   artifacts: Array<{ filename: string; description?: string; type: string }>,
-  initialMessage: string
+  initialMessage: string,
+  transcript: string
 ): string {
   const artifactList = artifacts.length
     ? artifacts.map((a) => `- \`${a.filename}\` (${a.type})${a.description ? ` - ${a.description}` : ""}`).join("\n")
@@ -299,6 +310,15 @@ ${ticketDescription ? `**Description:** ${ticketDescription}` : ""}
 ${artifactList}
 
 Use \`get_artifact\`/\`list_artifacts\` to read any of the above when the question needs it - don't guess at their contents from the filename/description alone.
+
+## What has been said on this card
+
+This is the card's own conversation, in order, with the speaker of each message
+named. A phase worker's question, the person's answer, the daemon's notices and
+your own earlier replies are all here. Read it before answering: a question about
+what somebody said is answered from this, not reconstructed.
+
+${transcript}
 
 ## User's Question
 
