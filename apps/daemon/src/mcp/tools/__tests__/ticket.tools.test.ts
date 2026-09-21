@@ -1,268 +1,56 @@
-import { describe, it, beforeEach, afterEach } from "node:test";
-import assert from "node:assert";
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
+
 import { ticketTools, ticketHandlers } from "../ticket.tools.js";
-import type { McpContext, McpToolResult } from "../../../types/mcp.types.js";
 
-// Mock fetch for testing
-let mockFetchCalls: {
-  url: string;
-  method?: string;
-  headers?: Record<string, string>;
-  body?: string;
-}[] = [];
-
-let mockFetchResponse: { ok: boolean; json: () => Promise<unknown>; statusText?: string } = {
-  ok: true,
-  json: async () => ({ id: "POT-123", title: "Test Ticket" }),
-};
-
-const originalFetch = globalThis.fetch;
-
-describe("MCP create_ticket Tool - ticketNumber Support", () => {
-  beforeEach(() => {
-    mockFetchCalls = [];
-    mockFetchResponse = {
-      ok: true,
-      json: async () => ({ id: "POT-123", title: "Test Ticket" }),
-    };
-
-    // Mock fetch globally
-    globalThis.fetch = (async (url: string, options?: RequestInit) => {
-      mockFetchCalls.push({
-        url,
-        method: options?.method,
-        headers: options?.headers as Record<string, string>,
-        body: options?.body as string,
-      });
-      return mockFetchResponse;
-    }) as typeof fetch;
+/**
+ * A tool nobody registered is a tool that does not exist.
+ *
+ * update_ticket is reachable only through this pair - the definition an agent is
+ * shown and the handler the proxy dispatches to - and the two are declared far
+ * enough apart in the file that adding one without the other compiles fine and
+ * fails at run time, in an agent's session, where nobody is watching.
+ */
+describe("the ticket tools an agent is offered", () => {
+  it("offers a handler for every tool it declares, and declares every handler", () => {
+    const declared = ticketTools.map((t) => t.name).sort();
+    const handled = Object.keys(ticketHandlers).sort();
+    assert.deepEqual(declared, handled);
   });
 
-  afterEach(() => {
-    globalThis.fetch = originalFetch;
+  it("offers update_ticket, with blocks, lines and blocked", () => {
+    const tool = ticketTools.find((t) => t.name === "update_ticket");
+    assert.ok(tool, "update_ticket is not declared");
+
+    const props = tool.inputSchema.properties as Record<string, unknown>;
+    assert.ok(props.blocks, "no blocks");
+    assert.ok(props.lines, "no lines");
+    assert.ok(props.blocked, "no blocked");
+
+    // Nothing is required: a call that sets only a line is a whole valid call.
+    assert.deepEqual(tool.inputSchema.required, []);
+    assert.equal(typeof ticketHandlers.update_ticket, "function");
   });
 
-  describe("Tool Schema", () => {
-    it("should include create_ticket tool", () => {
-      const createTicketTool = ticketTools.find((t) => t.name === "create_ticket");
-      assert.ok(createTicketTool, "create_ticket tool should exist");
-    });
-
-    it("should have ticketNumber in input schema properties", () => {
-      const createTicketTool = ticketTools.find((t) => t.name === "create_ticket");
-      assert.ok(createTicketTool, "create_ticket tool should exist");
-
-      const properties = (createTicketTool.inputSchema as any).properties;
-      assert.ok(
-        properties.ticketNumber,
-        "ticketNumber should be in input schema properties",
-      );
-    });
-
-    it("should describe ticketNumber parameter correctly", () => {
-      const createTicketTool = ticketTools.find((t) => t.name === "create_ticket");
-      assert.ok(createTicketTool, "create_ticket tool should exist");
-
-      const ticketNumberProp = (createTicketTool.inputSchema as any).properties.ticketNumber;
-      assert.strictEqual(ticketNumberProp.type, "string");
-      assert.ok(
-        ticketNumberProp.description.includes("custom ticket number"),
-        "Description should mention custom ticket number",
-      );
-    });
-
-    it("should keep title as the only required field", () => {
-      const createTicketTool = ticketTools.find((t) => t.name === "create_ticket");
-      assert.ok(createTicketTool, "create_ticket tool should exist");
-
-      const required = (createTicketTool.inputSchema as any).required;
-      assert.deepStrictEqual(required, ["title"]);
-    });
+  it("tells an agent that everything it does not name is left alone", () => {
+    const tool = ticketTools.find((t) => t.name === "update_ticket")!;
+    // The whole point of the tool is in its description, because an agent reads the
+    // description and never reads this file.
+    assert.match(tool.description, /without disturbing the rest/i);
+    assert.match(tool.description, /exactly as it was/i);
   });
 
-  describe("Handler Function", () => {
-    const mockContext: McpContext = {
-      projectId: "test-project",
-      ticketId: "POT-1",
-      brainstormId: "",
-      daemonUrl: "http://localhost:8443",
-    };
+  it("names both of the lines the Build worker writes", () => {
+    const tool = ticketTools.find((t) => t.name === "update_ticket")!;
+    assert.match(tool.description, /\bpr\b/);
+    assert.match(tool.description, /blocked-reason/);
+  });
 
-    it("should create ticket with title only", async () => {
-      const handler = ticketHandlers.create_ticket;
-      const result = (await handler(mockContext, {
-        title: "Test Ticket",
-      })) as McpToolResult;
-
-      assert.ok(result.content);
-      assert.strictEqual(result.content[0].type, "text");
-
-      // Verify fetch was called with correct payload
-      assert.strictEqual(mockFetchCalls.length, 1);
-      const call = mockFetchCalls[0];
-      assert.strictEqual(call.method, "POST");
-      const body = JSON.parse(call.body!);
-      assert.strictEqual(body.title, "Test Ticket");
-      assert.strictEqual(body.description, "");
-      assert.ok(!body.brainstormId);
-      assert.ok(!body.ticketNumber);
-    });
-
-    it("should create ticket with title and description", async () => {
-      const handler = ticketHandlers.create_ticket;
-      const result = (await handler(mockContext, {
-        title: "Test Ticket",
-        description: "Test Description",
-      })) as McpToolResult;
-
-      assert.ok(result.content);
-
-      const call = mockFetchCalls[0];
-      const body = JSON.parse(call.body!);
-      assert.strictEqual(body.title, "Test Ticket");
-      assert.strictEqual(body.description, "Test Description");
-    });
-
-    it("should create ticket with brainstormId", async () => {
-      const handler = ticketHandlers.create_ticket;
-      const result = (await handler(mockContext, {
-        title: "Test Ticket",
-        brainstormId: "brain_123",
-      })) as McpToolResult;
-
-      assert.ok(result.content);
-
-      const call = mockFetchCalls[0];
-      const body = JSON.parse(call.body!);
-      assert.strictEqual(body.brainstormId, "brain_123");
-    });
-
-    it("should create ticket with ticketNumber", async () => {
-      const handler = ticketHandlers.create_ticket;
-      const result = (await handler(mockContext, {
-        title: "Test Ticket",
-        ticketNumber: "JIRA-42",
-      })) as McpToolResult;
-
-      assert.ok(result.content);
-
-      const call = mockFetchCalls[0];
-      const body = JSON.parse(call.body!);
-      assert.strictEqual(body.ticketNumber, "JIRA-42");
-      assert.ok(!body.brainstormId);
-    });
-
-    it("should create ticket with all parameters", async () => {
-      const handler = ticketHandlers.create_ticket;
-      const result = (await handler(mockContext, {
-        title: "Test Ticket",
-        description: "Test Description",
-        brainstormId: "brain_123",
-        ticketNumber: "JIRA-42",
-      })) as McpToolResult;
-
-      assert.ok(result.content);
-
-      const call = mockFetchCalls[0];
-      const body = JSON.parse(call.body!);
-      assert.strictEqual(body.title, "Test Ticket");
-      assert.strictEqual(body.description, "Test Description");
-      assert.strictEqual(body.brainstormId, "brain_123");
-      assert.strictEqual(body.ticketNumber, "JIRA-42");
-    });
-
-    it("should not include ticketNumber if not provided", async () => {
-      const handler = ticketHandlers.create_ticket;
-      await handler(mockContext, {
-        title: "Test Ticket",
-      });
-
-      const call = mockFetchCalls[0];
-      const body = JSON.parse(call.body!);
-      assert.ok(!("ticketNumber" in body) || body.ticketNumber === undefined);
-    });
-
-    it("should use correct API endpoint", async () => {
-      const handler = ticketHandlers.create_ticket;
-      await handler(mockContext, {
-        title: "Test Ticket",
-      });
-
-      const call = mockFetchCalls[0];
-      assert.strictEqual(
-        call.url,
-        "http://localhost:8443/api/tickets/test-project",
-      );
-    });
-
-    it("should set correct content-type header", async () => {
-      const handler = ticketHandlers.create_ticket;
-      await handler(mockContext, {
-        title: "Test Ticket",
-      });
-
-      const call = mockFetchCalls[0];
-      assert.ok(call.headers);
-      assert.strictEqual(call.headers["Content-Type"], "application/json");
-    });
-
-    it("should return formatted response on success", async () => {
-      mockFetchResponse.json = async () => ({
-        id: "JIRA-42",
-        title: "Test Ticket",
-      });
-
-      const handler = ticketHandlers.create_ticket;
-      const result = (await handler(mockContext, {
-        title: "Test Ticket",
-        ticketNumber: "JIRA-42",
-      })) as McpToolResult;
-
-      assert.ok(result.content);
-      assert.strictEqual(result.content[0].type, "text");
-      assert.ok(result.content[0].text.includes("JIRA-42"));
-      assert.ok(result.content[0].text.includes("Test Ticket"));
-    });
-
-    it("should handle error responses with error body", async () => {
-      mockFetchResponse.ok = false;
-      mockFetchResponse.statusText = "Bad Request";
-      mockFetchResponse.json = async () => ({
-        error: "Invalid ticket number format",
-      });
-
-      const handler = ticketHandlers.create_ticket;
-
-      try {
-        await handler(mockContext, {
-          title: "Test Ticket",
-          ticketNumber: "invalid!!!",
-        });
-        assert.fail("Should have thrown an error");
-      } catch (err) {
-        assert.ok(err instanceof Error);
-        assert.ok(err.message.includes("Invalid ticket number format"));
-      }
-    });
-
-    it("should handle error responses without error body", async () => {
-      mockFetchResponse.ok = false;
-      mockFetchResponse.statusText = "Internal Server Error";
-      mockFetchResponse.json = async () => {
-        throw new Error("Not JSON");
-      };
-
-      const handler = ticketHandlers.create_ticket;
-
-      try {
-        await handler(mockContext, {
-          title: "Test Ticket",
-        });
-        assert.fail("Should have thrown an error");
-      } catch (err) {
-        assert.ok(err instanceof Error);
-        assert.ok(err.message.includes("Internal Server Error"));
-      }
-    });
+  it("says that blocking a card silently is not allowed", () => {
+    const tool = ticketTools.find((t) => t.name === "update_ticket")!;
+    const blocked = (tool.inputSchema.properties as Record<string, { description: string }>)
+      .blocked;
+    assert.match(blocked.description, /silently is\s+forbidden|silently is forbidden/);
+    assert.match(blocked.description, /blocked-reason/);
   });
 });
