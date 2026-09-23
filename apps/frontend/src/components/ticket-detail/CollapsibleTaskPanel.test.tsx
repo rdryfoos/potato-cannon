@@ -76,7 +76,7 @@ describe('CollapsibleTaskPanel', () => {
     expect(container.innerHTML).toBe('')
   })
 
-  it('renders expanded by default when tasks exist', async () => {
+  it('shows every task, with no control that could hide them', async () => {
     mockGetTicketTasks.mockResolvedValue(baseTasks)
     render(
       <CollapsibleTaskPanel projectId="proj-1" ticketId="POT-1" currentPhase="Build" />,
@@ -89,7 +89,7 @@ describe('CollapsibleTaskPanel', () => {
     expect(screen.queryByText('Write tests')).not.toBeNull()
   })
 
-  it('shows task count in header when expanded', async () => {
+  it('shows the task count in the header', async () => {
     mockGetTicketTasks.mockResolvedValue(baseTasks)
     render(
       <CollapsibleTaskPanel projectId="proj-1" ticketId="POT-1" currentPhase="Build" />,
@@ -113,7 +113,12 @@ describe('CollapsibleTaskPanel', () => {
     expect(screen.getAllByTestId('task-item-task-3').length).toBeGreaterThan(0)
   })
 
-  it('has collapsible header button', async () => {
+  it('has a header that is a label, not a control', async () => {
+    // The header used to be a button that folded the tasks away. A panel that can be
+    // collapsed is a panel that can be found collapsed, by a reader who did not collapse
+    // it and has no reason to think anything is behind it. The header stays, because a
+    // reader wants to know what they are looking at and how much of it is done; the
+    // control goes.
     mockGetTicketTasks.mockResolvedValue(baseTasks)
     render(
       <CollapsibleTaskPanel projectId="proj-1" ticketId="POT-1" currentPhase="Build" />,
@@ -122,6 +127,38 @@ describe('CollapsibleTaskPanel', () => {
     await waitFor(() => {
       expect(screen.getAllByTestId('task-panel-header').length).toBeGreaterThan(0)
     })
+
+    const header = screen.getAllByTestId('task-panel-header')[0]
+    expect(header.tagName).not.toBe('BUTTON')
+    expect(header.querySelector('button')).toBeNull()
+    expect(header.closest('button')).toBeNull()
+  })
+
+  it('keeps the tasks visible with no height a collapse could set to zero', async () => {
+    mockGetTicketTasks.mockResolvedValue(baseTasks)
+    render(
+      <CollapsibleTaskPanel projectId="proj-1" ticketId="POT-1" currentPhase="Build" />,
+      { wrapper: createWrapper() },
+    )
+    await waitFor(() => {
+      expect(screen.getAllByTestId('task-panel-content').length).toBeGreaterThan(0)
+    })
+
+    const content = screen.getAllByTestId('task-panel-content')[0] as HTMLElement
+    expect(content.style.maxHeight).toBe('')
+    expect(screen.getAllByTestId('task-item-task-1').length).toBeGreaterThan(0)
+  })
+
+  it('no longer shows the one-line summary that stood in for the hidden list', async () => {
+    mockGetTicketTasks.mockResolvedValue(baseTasks)
+    render(
+      <CollapsibleTaskPanel projectId="proj-1" ticketId="POT-1" currentPhase="Build" />,
+      { wrapper: createWrapper() },
+    )
+    await waitFor(() => {
+      expect(screen.getAllByTestId('task-panel-header').length).toBeGreaterThan(0)
+    })
+    expect(screen.queryByTestId('collapsed-summary')).toBeNull()
   })
 
   it('renders content area with correct structure', async () => {
