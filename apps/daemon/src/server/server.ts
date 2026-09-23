@@ -1,4 +1,5 @@
 import express, { Express } from "express";
+import { healthPayload } from "./health.js";
 import path from "path";
 import fs from "fs/promises";
 import { existsSync } from "fs";
@@ -604,13 +605,15 @@ export async function main(): Promise<void> {
   }
 
   // Health check
+  //
+  // projectCount is read here, on every request, rather than from the map this
+  // function captured at boot. refreshProjects() replaces that map rather than
+  // mutating it, so the captured one never changed again: a daemon that had been up
+  // since before a project was registered reported the count it booted with, for ever,
+  // and the one number a person uses to check the daemon knows about their project was
+  // the one number that could not tell them.
   app.get("/health", (_req, res) => {
-    res.json({
-      status: "ok",
-      uptime: process.uptime(),
-      telegramMode,
-      projectCount: projects.size,
-    });
+    res.json(healthPayload(telegramMode));
   });
 
   // SSE events
