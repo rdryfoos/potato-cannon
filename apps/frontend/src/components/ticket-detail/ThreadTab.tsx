@@ -54,6 +54,25 @@ export function parseCardIds(description?: string): string[] {
  * and this tab adds nothing to either beyond narrowing the rows to the card's
  * own ids. No card node is drawn, because a card is a lens and not a level.
  */
+/**
+ * What this picture is of, in one line above the frame.
+ *
+ * The tab reads the worktree's manifest live off disk, so it shows whatever the last
+ * Gate run in that worktree left behind. Without a date and a commit a reader cannot
+ * tell this attempt's thread from the one before it, and on 2026-09-21 a report that
+ * was eight hours stale and from another board read exactly like a current one.
+ *
+ * Either half can be missing and the line says which: a card with no commits yet has no
+ * HEAD, and a manifest written by an older emitter has no generatedAt.
+ */
+export function asOfLine(generatedAt: string | null, head: string | null): string {
+  const when = generatedAt
+    ? `as of ${new Date(generatedAt).toLocaleString()}`
+    : 'as of an unrecorded time'
+  const where = head ? `worktree at ${head.slice(0, 7)}` : 'worktree commit unknown'
+  return `${when}, ${where}`
+}
+
 export function ThreadTab({ projectId, ticketId, description, title }: ThreadTabProps) {
   const [lens, setLens] = useState<ThreadLens>('thread')
   const manifestUrl = `/api/tickets/${encodeURIComponent(projectId)}/${encodeURIComponent(ticketId)}/trace-manifest.json`
@@ -67,7 +86,14 @@ export function ThreadTab({ projectId, ticketId, description, title }: ThreadTab
     queryKey: ['thread-manifest', projectId, ticketId],
     queryFn: async () => {
       const res = await fetch(manifestUrl)
-      if (res.ok) return { present: true as const }
+      if (res.ok) {
+        const body = await res.json().catch(() => null)
+        return {
+          present: true as const,
+          generatedAt: typeof body?.generatedAt === 'string' ? body.generatedAt : null,
+          head: typeof body?.worktreeHead === 'string' ? body.worktreeHead : null,
+        }
+      }
       const body = await res.json().catch(() => null)
       return {
         present: false as const,
@@ -126,6 +152,9 @@ export function ThreadTab({ projectId, ticketId, description, title }: ThreadTab
             : 'no ids: line on this card, showing the whole manifest'}
         </span>
       </div>
+      <p className="px-4 pb-2 text-xs text-text-muted shrink-0" data-testid="thread-as-of">
+        {asOfLine(status.generatedAt, status.head)}
+      </p>
       <iframe
         key={lens}
         title="Thread"

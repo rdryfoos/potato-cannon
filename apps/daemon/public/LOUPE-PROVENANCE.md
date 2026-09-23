@@ -13,7 +13,10 @@ missed for weeks. Out here the build cannot reach it. It is also no longer serve
 over HTTP: the daemon mounts `public/loupe`, not `public`.
 
 - Source: https://github.com/rdryfoos/loupe, `packages/viz`
-- Commit: a971926 ("The card lens"), on branch feat/descent-view
+- Commit: 180f450 ("Merge pull request #2 from rdryfoos/feat/r5-own-status-speaks"), on main,
+  re-vendored 2026-09-23. It carries R5 as revised: a started node answers for its own
+  work, so started debt over a backlog child reads amber instead of falling through to
+  blue. Loupe's own `descent.test.ts` passes at that commit, 34 tests.
 - Built with: `vite build --base=/loupe/ --outDir <here> --emptyOutDir`
 
 The `--base=/loupe/` is load-bearing. The public loupe.dryfoos.com bundle is
@@ -38,11 +41,19 @@ To refresh:
 then update the commit line above, and re-apply the hand edits below. Nothing
 needs restoring: `--emptyOutDir` empties `loupe/`, and this file is not in it.
 
-## Hand edits in this vendored copy, 2026-09-20
+## Hand edits that are no longer here, 2026-09-20 to 2026-09-23
 
-Two changes were made here by hand, in the built bundle, and **a rebuild by the
-command above will erase them.** They are written down because a silent loss is the
-likeliest way this goes wrong.
+Two changes were once made by hand in the built bundle, and this file said a rebuild
+would erase them. **They are gone, and they were already gone before the re-vendor of
+2026-09-23.** The bundle vendored at a971926 carries the same inline `#e8bd52` stroke
+this file says was replaced, so the loss happened at that refresh and nobody noticed
+for a day: exactly the silent loss the warning predicted, with the warning itself left
+standing as though it had worked.
+
+They are kept below as a record of what was wanted and where it belongs, which is
+Loupe's own source. Neither is in Loupe at `180f450`: `web/src/strand.ts` still writes
+the hex inline. Do not re-apply them here. A hand edit in a build output is a change
+with no home, and this section is what one costs.
 
 1. **The field opens expanded.** The `O` flag that tracks the expanded state starts
    true rather than false. The collapse control is untouched, so a reader can still
@@ -65,8 +76,7 @@ likeliest way this goes wrong.
    debt and backlog alike, which is what read as a warning colour on rows that were
    nothing of the kind.
 
-Both belong in Loupe's own source, and are docketed there. Until that lands, a
-refresh of this directory has to re-apply them.
+Both belong in Loupe's own source, and are docketed there.
 
 The Thread tab drives it through the URL: `?embed=1` for the bare shell,
 `?lens=thread|descent` for which view, `?ids=` for the card's own ids, and

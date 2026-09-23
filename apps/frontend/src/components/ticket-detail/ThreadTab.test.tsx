@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseCardIds } from './ThreadTab'
+import { asOfLine, parseCardIds } from './ThreadTab'
 
 describe('the card lens: a card names its own ids', () => {
   it('reads the ids line a real card carries', () => {
@@ -48,5 +48,39 @@ describe('the card lens: a card names its own ids', () => {
   it('does not mistake prose that merely mentions ids for the line', () => {
     // The line has to start with it. Prose about the ids line is not one.
     expect(parseCardIds('The ids: line is missing on purpose.')).toEqual([])
+  })
+})
+
+describe('the as of line: which picture this is', () => {
+  // The tab reads the worktree's manifest live off disk, so it shows whatever the last
+  // Gate run in that worktree left. On 2026-09-21 a Thread Report eight hours stale and
+  // from another board read exactly like a current one. The line is the fix, and these
+  // assert it says both halves and never invents either.
+  it('names the time it was generated and the commit it describes', () => {
+    const line = asOfLine('2026-09-23T14:05:00.000Z', '8c1f4a2d9e7b6a5c4d3e2f1a0b9c8d7e6f5a4b3c')
+    expect(line).toContain('8c1f4a2')
+    expect(line).toMatch(/^as of .+, worktree at 8c1f4a2$/)
+  })
+
+  it('shortens the commit to seven characters, the length a reader can carry', () => {
+    const line = asOfLine('2026-09-23T14:05:00.000Z', 'abcdef1234567890abcdef1234567890abcdef12')
+    expect(line).toContain('worktree at abcdef1')
+    expect(line).not.toContain('abcdef1234567890')
+  })
+
+  it('says the commit is unknown rather than showing nothing', () => {
+    // A card with no commits yet has no HEAD. Saying so is not the same as a line that
+    // quietly leaves the commit out, which reads as though there were none to give.
+    expect(asOfLine('2026-09-23T14:05:00.000Z', null)).toContain('worktree commit unknown')
+  })
+
+  it('says the time is unrecorded rather than printing a broken date', () => {
+    expect(asOfLine(null, '8c1f4a2d9e7b6a5c4d3e2f1a0b9c8d7e6f5a4b3c')).toBe(
+      'as of an unrecorded time, worktree at 8c1f4a2',
+    )
+  })
+
+  it('still says both halves when it knows neither', () => {
+    expect(asOfLine(null, null)).toBe('as of an unrecorded time, worktree commit unknown')
   })
 })

@@ -1,7 +1,9 @@
+import { execFile } from "child_process";
 import type { Express, Request, Response } from "express";
 import express from "express";
 import fs from "fs/promises";
 import path from "path";
+import { promisify } from "util";
 import { fileURLToPath } from "url";
 import type { Project } from "../../types/config.types.js";
 
@@ -100,6 +102,28 @@ async function findManifest(worktree: string): Promise<string | null> {
 
 const CONTEXT_LINES = 8;
 
+const run = promisify(execFile);
+
+/**
+ * The commit the card's worktree is standing on, or null.
+ *
+ * The manifest says when it was generated and never which commit it describes, and the
+ * Thread tab read it live off disk, so it showed whatever the last Gate run in that
+ * worktree happened to leave. A reader had no way to tell a picture of this attempt from
+ * a picture of the one before it. Returns null rather than throwing: a card with no
+ * worktree, or a worktree with no commits, still gets its manifest, and the tab says it
+ * does not know rather than not saying anything.
+ */
+export async function worktreeHead(worktree: string): Promise<string | null> {
+  try {
+    const { stdout } = await run("git", ["-C", worktree, "rev-parse", "HEAD"]);
+    const sha = stdout.trim();
+    return /^[0-9a-f]{40}$/.test(sha) ? sha : null;
+  } catch {
+    return null;
+  }
+}
+
 export function registerThreadRoutes(app: Express, getProjects: () => Map<string, Project>): void {
   // The vendored Loupe bundle. Built from the loupe repo with --base=/loupe/,
   // so its own asset URLs already point here. See public/LOUPE-PROVENANCE.md,
@@ -145,6 +169,9 @@ export function registerThreadRoutes(app: Express, getProjects: () => Map<string
         }
 
         manifest.repoPath = cardToken(projectId, ticketId);
+        // What commit this picture is of. Loupe ignores fields it does not know, and the
+        // Thread tab reads this one to print its "as of" line.
+        manifest.worktreeHead = await worktreeHead(worktree);
         res.setHeader("Cache-Control", "no-store");
         res.json(manifest);
       } catch (error) {
