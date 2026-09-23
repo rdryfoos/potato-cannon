@@ -2,7 +2,7 @@
 import fs from "fs/promises";
 import path from "path";
 import { getProjectTemplateDir } from "../config/paths.js";
-import { getTemplate, getAgentPrompt as getGlobalAgentPrompt, getTemplateChangelog } from "./template.store.js";
+import { getTemplate, getAgentPrompt as getGlobalAgentPrompt, getTemplateChangelog, listTemplateAgentFiles } from "./template.store.js";
 import type { WorkflowTemplate } from "../types/template.types.js";
 import { legacyVersionToSemver } from "../utils/semver.js";
 
@@ -161,10 +161,29 @@ export async function copyTemplateToProject(
     JSON.stringify(localTemplate, null, 2)
   );
 
-  // Copy all agent files
+  // Every agent file the template ships, not only the ones a phase names.
+  //
+  // This walked the phases' workers and copied what they pointed at. An agent no phase
+  // names was therefore never copied, and ticket-qa.md is exactly that: Buddy is
+  // ad-hoc, summoned from a card rather than run by a column. So every project got a
+  // template with no Buddy in it, an upgrade reported success, and the file had to be
+  // placed by hand afterwards by somebody who knew. The phase walk stays, because it
+  // resolves nested workers and an agent may live outside agents/; the directory sweep
+  // is what makes "every agent" true.
   for (const phase of globalTemplate.phases) {
     for (const worker of phase.workers) {
       await copyWorkersAgents(projectId, templateName, worker);
+    }
+  }
+  for (const agentFile of await listTemplateAgentFiles(templateName)) {
+    try {
+      const content = await getGlobalAgentPrompt(templateName, agentFile);
+      const targetPath = path.join(templateDir, agentFile);
+      await fs.mkdir(path.dirname(targetPath), { recursive: true });
+      await fs.writeFile(targetPath, content);
+    } catch {
+      // Unreadable in the global template; the phase walk above has already copied
+      // anything a column actually needs, and a missing ad-hoc agent is not fatal.
     }
   }
 

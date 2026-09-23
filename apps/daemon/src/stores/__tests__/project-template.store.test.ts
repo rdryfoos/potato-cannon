@@ -13,6 +13,74 @@ import fs from "fs/promises";
 import path from "path";
 
 describe("project-template.store", () => {
+  describe("copyTemplateToProject copies every agent", () => {
+    // It walked the phases' workers and copied what they pointed at, so an agent no
+    // phase names was never copied. ticket-qa.md is exactly that: Buddy is ad-hoc,
+    // summoned from a card rather than run by a column. Every project therefore got a
+    // template with no Buddy in it, upgrade-template reported success, and somebody
+    // who knew had to place the file by hand afterwards.
+    const templateName = "test-every-agent-" + Date.now();
+    const projectId = "test-every-agent-project-" + Date.now();
+    const templateDir = path.join(TEST_HOME, "templates", templateName);
+    const projectTemplateDir = path.join(TEST_HOME, "project-data", projectId, "template");
+
+    before(async () => {
+      await fs.mkdir(path.join(templateDir, "agents"), { recursive: true });
+      await fs.writeFile(
+        path.join(templateDir, "workflow.json"),
+        JSON.stringify({
+          name: templateName,
+          version: "1.0.0",
+          phases: [
+            {
+              id: "Build",
+              name: "Build",
+              workers: [{ id: "builder", type: "agent", source: "agents/build.md" }],
+            },
+          ],
+        }),
+      );
+      await fs.writeFile(path.join(templateDir, "agents", "build.md"), "the builder\n");
+      // Named by no phase, which is the whole point.
+      await fs.writeFile(path.join(templateDir, "agents", "ticket-qa.md"), "Buddy\n");
+      await fs.writeFile(path.join(templateDir, "agents", "artifact-qa.md"), "the artifact chat\n");
+    });
+
+    after(async () => {
+      await fs.rm(templateDir, { recursive: true, force: true }).catch(() => {});
+      await fs.rm(path.join(TEST_HOME, "project-data", projectId), {
+        recursive: true,
+        force: true,
+      }).catch(() => {});
+    });
+
+    it("copies the agent a phase names", async () => {
+      const { copyTemplateToProject } = await import("../project-template.store.js");
+      await copyTemplateToProject(projectId, templateName);
+      assert.strictEqual(
+        await fs.readFile(path.join(projectTemplateDir, "agents", "build.md"), "utf-8"),
+        "the builder\n",
+      );
+    });
+
+    it("copies ticket-qa.md, which no phase names", async () => {
+      const { copyTemplateToProject } = await import("../project-template.store.js");
+      await copyTemplateToProject(projectId, templateName);
+      assert.strictEqual(
+        await fs.readFile(path.join(projectTemplateDir, "agents", "ticket-qa.md"), "utf-8"),
+        "Buddy\n",
+      );
+    });
+
+    it("copies every other ad-hoc agent too, not just the one we went looking for", async () => {
+      const { copyTemplateToProject } = await import("../project-template.store.js");
+      await copyTemplateToProject(projectId, templateName);
+
+      const copied = (await fs.readdir(path.join(projectTemplateDir, "agents"))).sort();
+      assert.deepStrictEqual(copied, ["artifact-qa.md", "build.md", "ticket-qa.md"]);
+    });
+  });
+
   describe("deleteProjectTemplate", () => {
     // Deleting a project was one row out of the database and nothing on disk. This
     // function existed from the start and nothing called it, so every deleted project
