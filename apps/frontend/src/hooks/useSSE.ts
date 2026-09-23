@@ -69,6 +69,12 @@ export function useSSE() {
       ticketEvents.forEach(event => {
         eventSource.addEventListener(event, () => {
           queryClient.refetchQueries({ queryKey: ['tickets'] })
+          // ...and the one card the detail panel is reading. ['ticket'] and ['tickets']
+          // are different keys: refetching the board's list left the open panel showing
+          // whatever it had when it opened, so a description a worker had just written,
+          // a phase it had just moved to or a block it had just set were all invisible
+          // until the reader pressed Cmd-R. Everyone who watched a card run hit this.
+          queryClient.refetchQueries({ queryKey: ['ticket'] })
           queryClient.refetchQueries({ queryKey: ['artifacts'] })
           // Epics derive status/counts from tickets, so refresh them too
           queryClient.refetchQueries({ queryKey: ['epics'] })
@@ -79,6 +85,7 @@ export function useSSE() {
       // Ticket restarted - invalidate all related queries and dispatch custom event
       eventSource.addEventListener('ticket:restarted', (e) => {
         queryClient.refetchQueries({ queryKey: ['tickets'] })
+        queryClient.refetchQueries({ queryKey: ['ticket'] })
         queryClient.refetchQueries({ queryKey: ['sessions'] })
         queryClient.refetchQueries({ queryKey: ['tasks'] })
         try {
@@ -125,11 +132,13 @@ export function useSSE() {
       eventSource.addEventListener('session:started', () => {
         queryClient.refetchQueries({ queryKey: ['sessions'] })
         queryClient.refetchQueries({ queryKey: ['tickets'] })
+        queryClient.refetchQueries({ queryKey: ['ticket'] })
       })
 
       eventSource.addEventListener('session:ended', (e) => {
         queryClient.refetchQueries({ queryKey: ['sessions'] })
         queryClient.refetchQueries({ queryKey: ['tickets'] })
+        queryClient.refetchQueries({ queryKey: ['ticket'] })
         queryClient.refetchQueries({ queryKey: ['brainstorms'] })
         // Clear processing state for this ticket
         try {
