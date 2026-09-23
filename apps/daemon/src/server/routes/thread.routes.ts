@@ -102,7 +102,8 @@ const CONTEXT_LINES = 8;
 
 export function registerThreadRoutes(app: Express, getProjects: () => Map<string, Project>): void {
   // The vendored Loupe bundle. Built from the loupe repo with --base=/loupe/,
-  // so its own asset URLs already point here. See public/loupe/PROVENANCE.md.
+  // so its own asset URLs already point here. See public/LOUPE-PROVENANCE.md,
+  // which is beside that folder rather than in it because a refresh empties it.
   app.use("/loupe", express.static(path.join(__dirname, "..", "..", "..", "public", "loupe")));
 
   // The card's manifest, with repoPath rewritten to this card's token.

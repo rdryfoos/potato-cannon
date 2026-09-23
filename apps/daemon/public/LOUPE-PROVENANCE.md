@@ -1,8 +1,16 @@
 # Vendored Loupe viewer bundle
 
-Static build of the Loupe viewer, served by the daemon at `/loupe/` and framed
-by the card pane's Thread tab. It is a prebuilt artifact, not source: edit it in
-the loupe repo and rebuild, never here.
+Static build of the Loupe viewer, in `loupe/` beside this file, served by the
+daemon at `/loupe/` and framed by the card pane's Thread tab. It is a prebuilt
+artifact, not source: edit it in the loupe repo and rebuild, never here.
+
+**This file lives here, one level up, and not in `loupe/`, because `loupe/` is a
+build output directory.** The refresh command below empties it. This file used to
+sit inside it and say "then restore this file", which is a procedure somebody has
+to remember at the one moment they are busy doing something else; the two hand
+edits recorded at the bottom are the kind of thing that is lost that way and not
+missed for weeks. Out here the build cannot reach it. It is also no longer served
+over HTTP: the daemon mounts `public/loupe`, not `public`.
 
 - Source: https://github.com/rdryfoos/loupe, `packages/viz`
 - Commit: a971926 ("The card lens"), on branch feat/descent-view
@@ -27,7 +35,8 @@ To refresh:
     ./node_modules/.bin/vite build --base=/loupe/ \
       --outDir <potato-cannon>/apps/daemon/public/loupe --emptyOutDir
 
-then restore this file, which the build's --emptyOutDir removes.
+then update the commit line above, and re-apply the hand edits below. Nothing
+needs restoring: `--emptyOutDir` empties `loupe/`, and this file is not in it.
 
 ## Hand edits in this vendored copy, 2026-09-20
 
