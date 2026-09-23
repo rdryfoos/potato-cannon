@@ -33,6 +33,7 @@ import { getWipStatus } from "../../services/session/wip.js";
 import { checkPhaseEntry } from "../../services/session/entry-check.js";
 import { chatService } from "../../services/chat.service.js";
 import { applyEdit, setLine } from "../../services/card-description.js";
+import { matchesOfferedAnswer } from "../../services/answer-match.js";
 import { CANNON, callerSpeaker } from "../../services/speaker.js";
 
 const upload = multer({
@@ -597,6 +598,29 @@ export function registerTicketRoutes(
 
         if (!message) {
           res.status(400).json({ error: "Missing message" });
+          return;
+        }
+
+        // What a person typed is only an answer if the worker offered it.
+        //
+        // This route took whatever arrived, wrote it as the answer and resumed the
+        // worker with it. On the second cold run a person typed "Buddy?" into the
+        // composer while BAN-1's worker was suspended on a question; that became the
+        // answer, the worker resumed on it, and the card went red. A question with no
+        // options is free text and anything answers it; a question with options has a
+        // closed set, and a message outside it is conversation.
+        const pending = readQuestion(projectId, ticketId);
+        if (pending && !matchesOfferedAnswer(pending.options, message)) {
+          const ticket = await getTicket(projectId, ticketId);
+          if (ticket?.conversationId) {
+            addMessage(ticket.conversationId, {
+              type: "user",
+              text: message,
+              speaker: { kind: "person", name: "You" },
+            });
+            eventBus.emit("ticket:updated", { projectId, ticket });
+          }
+          res.json({ success: true, answered: false, conversation: true });
           return;
         }
 
