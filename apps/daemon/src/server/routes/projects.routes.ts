@@ -317,6 +317,9 @@ export function registerProjectRoutes(
         swimlaneColors?: Record<string, string>;
         wipLimits?: Record<string, number>;
         folderId?: string | null;
+        // The prefix this project's card ids carry. Cleaned in the store; "" clears it
+        // and the derivation from the display name takes over again.
+        cardPrefix?: string | null;
       };
 
       const project = getProjectById(id);

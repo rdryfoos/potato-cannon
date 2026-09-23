@@ -1,6 +1,6 @@
 import type Database from "better-sqlite3";
 
-const CURRENT_SCHEMA_VERSION = 16;
+const CURRENT_SCHEMA_VERSION = 17;
 
 /**
  * Run database migrations.
@@ -71,6 +71,10 @@ export function runMigrations(db: Database.Database): void {
 
   if (version < 16) {
     migrateV16(db);
+  }
+
+  if (version < 17) {
+    migrateV17(db);
   }
 
   db.pragma(`user_version = ${CURRENT_SCHEMA_VERSION}`);
@@ -625,5 +629,21 @@ function migrateV16(db: Database.Database): void {
   }
   if (!columns.some((c) => c.name === "speaker_name")) {
     db.exec(`ALTER TABLE conversation_messages ADD COLUMN speaker_name TEXT`);
+  }
+}
+
+/**
+ * V17: a card prefix a project owns, rather than one derived from its name.
+ *
+ * The prefix was the first three alphanumerics of the display name, uppercased. Two
+ * boards called "Bang (visual)" and "Bang (spare)" both derived BAN, so every card on
+ * both had to be created with its id passed by hand, for weeks, on pain of a
+ * collision. Null means "derive it as before", so nothing changes for a project that
+ * never sets one.
+ */
+function migrateV17(db: Database.Database): void {
+  const columns = db.pragma("table_info(projects)") as { name: string }[];
+  if (!columns.some((c) => c.name === "card_prefix")) {
+    db.exec(`ALTER TABLE projects ADD COLUMN card_prefix TEXT`);
   }
 }

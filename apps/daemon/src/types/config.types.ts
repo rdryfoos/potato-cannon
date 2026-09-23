@@ -47,6 +47,7 @@ export interface Project {
   swimlaneColors?: Record<string, string>;  // phase name -> hex color
   wipLimits?: Record<string, number>;
   branchPrefix?: string;  // Custom branch prefix (default: 'potato')
+  cardPrefix?: string | null;  // The prefix this project's card ids carry; derived from the name when unset
   folderId?: string | null;  // FK to folders table
 }
 

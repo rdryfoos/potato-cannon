@@ -1,4 +1,5 @@
 import type Database from "better-sqlite3";
+import { normaliseCardPrefix } from "./utils.js";
 import { randomUUID } from "crypto";
 import { getDatabase } from "./db.js";
 import type { Project } from "../types/config.types.js";
@@ -65,6 +66,7 @@ function rowToProject(row: Record<string, unknown>): Project {
       ? JSON.parse(row.wip_limits as string)
       : undefined,
     branchPrefix: (row.branch_prefix as string) || 'potato',
+    cardPrefix: (row.card_prefix as string) || undefined,
     folderId: (row.folder_id as string) || null,
   };
 }
@@ -206,6 +208,10 @@ export class ProjectStore {
           ? JSON.stringify(updates.wipLimits)
           : null
       );
+    }
+    if (updates.cardPrefix !== undefined) {
+      fields.push("card_prefix = ?");
+      values.push(normaliseCardPrefix(updates.cardPrefix));
     }
     if (updates.branchPrefix !== undefined) {
       fields.push("branch_prefix = ?");

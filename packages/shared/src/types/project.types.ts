@@ -14,5 +14,6 @@ export interface Project {
   swimlaneColors?: Record<string, string>
   wipLimits?: Record<string, number>
   branchPrefix?: string
+  cardPrefix?: string
   folderId?: string | null
 }
