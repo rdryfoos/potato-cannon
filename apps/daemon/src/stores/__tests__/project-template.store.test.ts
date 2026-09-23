@@ -13,6 +13,73 @@ import fs from "fs/promises";
 import path from "path";
 
 describe("project-template.store", () => {
+  describe("deleteProjectTemplate", () => {
+    // Deleting a project was one row out of the database and nothing on disk. This
+    // function existed from the start and nothing called it, so every deleted project
+    // left its template copy behind: a workflow, any agent overrides and a changelog,
+    // keyed by an id nothing referred to any more. Registering the same folder again
+    // produced a new id and a second copy beside the first.
+    const projectId = "test-template-delete-" + Date.now();
+    const templateDir = path.join(TEST_HOME, "project-data", projectId, "template");
+
+    beforeEach(async () => {
+      await fs.rm(path.join(TEST_HOME, "project-data", projectId), {
+        recursive: true,
+        force: true,
+      }).catch(() => {});
+    });
+
+    after(async () => {
+      await fs.rm(path.join(TEST_HOME, "project-data", projectId), {
+        recursive: true,
+        force: true,
+      }).catch(() => {});
+    });
+
+    it("removes the template directory and everything under it", async () => {
+      const { deleteProjectTemplate } = await import("../project-template.store.js");
+
+      await fs.mkdir(path.join(templateDir, "agents"), { recursive: true });
+      await fs.writeFile(path.join(templateDir, "workflow.json"), "{}");
+      await fs.writeFile(path.join(templateDir, "changelog.md"), "# changelog\n");
+      await fs.writeFile(path.join(templateDir, "agents", "build.md"), "an override\n");
+
+      assert.strictEqual(await deleteProjectTemplate(projectId), true);
+
+      await assert.rejects(fs.access(templateDir), "the template directory is gone");
+      await assert.rejects(
+        fs.access(path.join(templateDir, "agents", "build.md")),
+        "the agent override went with it",
+      );
+    });
+
+    it("says false, and does not throw, when there is nothing to remove", async () => {
+      // A project that never had a local copy is the ordinary case, not an error.
+      const { deleteProjectTemplate } = await import("../project-template.store.js");
+      assert.strictEqual(await deleteProjectTemplate(projectId), false);
+    });
+
+    it("touches no other project's template", async () => {
+      const { deleteProjectTemplate } = await import("../project-template.store.js");
+      const neighbour = projectId + "-neighbour";
+      const neighbourDir = path.join(TEST_HOME, "project-data", neighbour, "template");
+      try {
+        await fs.mkdir(templateDir, { recursive: true });
+        await fs.mkdir(neighbourDir, { recursive: true });
+        await fs.writeFile(path.join(neighbourDir, "workflow.json"), "{}");
+
+        await deleteProjectTemplate(projectId);
+
+        await fs.access(path.join(neighbourDir, "workflow.json"));
+      } finally {
+        await fs.rm(path.join(TEST_HOME, "project-data", neighbour), {
+          recursive: true,
+          force: true,
+        }).catch(() => {});
+      }
+    });
+  });
+
   describe("hasProjectAgentOverride", () => {
     let testProjectDir: string;
     const potatoDir = TEST_HOME;

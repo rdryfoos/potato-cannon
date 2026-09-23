@@ -220,9 +220,24 @@ export async function getProjectChangelog(projectId: string): Promise<string | n
 }
 
 /**
- * Delete a project's local template (for reset/cleanup).
+ * Delete a project's local template.
+ *
+ * This existed from the start and nothing called it when a project was deleted, so a
+ * deleted project left ~/.potato-cannon/project-data/<id>/template behind for ever:
+ * a workflow, any agent overrides and a changelog, keyed by an id nothing referred to
+ * any more. Registering the same folder again produced a new id and a second copy
+ * beside the first.
+ *
+ * Returns whether there was anything to remove, so a caller can say what it did.
+ * Missing is not an error: a project that never had a local copy is the ordinary case.
  */
-export async function deleteProjectTemplate(projectId: string): Promise<void> {
+export async function deleteProjectTemplate(projectId: string): Promise<boolean> {
   const templateDir = getProjectTemplateDir(projectId);
+  try {
+    await fs.access(templateDir);
+  } catch {
+    return false;
+  }
   await fs.rm(templateDir, { recursive: true, force: true });
+  return true;
 }
