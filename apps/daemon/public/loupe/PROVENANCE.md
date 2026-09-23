@@ -5,7 +5,7 @@ by the card pane's Thread tab. It is a prebuilt artifact, not source: edit it in
 the loupe repo and rebuild, never here.
 
 - Source: https://github.com/rdryfoos/loupe, `packages/viz`
-- Commit: bd8c83e ("Corrected settled sample: 25/25 cited paths resolve")
+- Commit: a971926 ("The card lens"), on branch feat/descent-view
 - Built with: `vite build --base=/loupe/ --outDir <here> --emptyOutDir`
 
 The `--base=/loupe/` is load-bearing. The public loupe.dryfoos.com bundle is
@@ -58,3 +58,7 @@ likeliest way this goes wrong.
 
 Both belong in Loupe's own source, and are docketed there. Until that lands, a
 refresh of this directory has to re-apply them.
+
+The Thread tab drives it through the URL: `?embed=1` for the bare shell,
+`?lens=thread|descent` for which view, `?ids=` for the card's own ids, and
+`?title=` for the card's name in the rail header.

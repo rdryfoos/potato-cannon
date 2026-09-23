@@ -449,7 +449,12 @@ export function TicketDetailPanel() {
                   </ScrollArea>
                 </TabsContent>
                 <TabsContent value="thread" className="mt-0 flex-1 min-h-0">
-                  <ThreadTab projectId={currentProjectId!} ticketId={ticket.id} />
+                  <ThreadTab
+                    projectId={currentProjectId!}
+                    ticketId={ticket.id}
+                    description={ticket.description}
+                    title={ticket.title}
+                  />
                 </TabsContent>
                 <TabsContent value="settings" className="mt-0 flex-1 min-h-0">
                   <ScrollArea className="h-full">
