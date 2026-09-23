@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback, useRef } from 'react'
+import { byCardId } from '@/lib/card-order'
 import {
   DndContext,
   DragEndEvent,
@@ -250,6 +251,12 @@ export function Board({ projectId }: BoardProps) {
           }
         }
       })
+    }
+    // Every column shows its cards oldest first, by id. The daemon's list arrives in
+    // insertion order, which is not an order a reader thinks in: in Ideas, a reader
+    // told to drag the first card had to read three titles to find it.
+    for (const phase of Object.keys(grouped)) {
+      grouped[phase] = byCardId(grouped[phase])
     }
     return grouped
   }, [tickets, phases])
