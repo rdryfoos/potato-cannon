@@ -68,6 +68,8 @@ export interface Phase {
   workers: Worker[];
   transitions: Transitions;
   requiresWorktree?: boolean;
+  /** What this column is for, when its name does not say. See shared's phase-role. */
+  role?: string;
 }
 
 // A command the daemon runs before a ticket enters a phase. Exit zero lets the

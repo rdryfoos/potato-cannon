@@ -1,18 +1,20 @@
+import { roleOf, type PhaseLike } from '@potato-cannon/shared'
+
 /**
  * The columns where somebody is asking whether the thing works.
  *
- * Try it and Buddy were offered in the review column only. That is where a person
- * first asks, but it is not the last place they ask: a card in Done is a card somebody
- * comes back to, to see what it built, or to find out what it was for. On 2026-09-23 a
- * reader opening a card in Done had neither the button nor the agent, on the one card
- * whose answer was finished.
+ * Try it and Buddy were offered in the review column only, and the column was found by
+ * name: `phase === 'Review' || phase === 'Align'`. Every project that renamed a column
+ * had to be added to that list, and a project nobody had thought of lost the button.
  *
- * The column is named Review in the stock template, Align in a project that renamed it,
- * and Done is Done everywhere. Matching on the name rather than the position is what
- * lets a board that still says Align keep working.
+ * It asks what the column is *for* now. A template that declares a role is believed; a
+ * template that says nothing is read by its names, so a board that still says Align
+ * keeps working and nothing has to be renamed for anything to keep running.
+ *
+ * Done is here as well as review, because a card in Done is a card somebody comes back
+ * to, to see what it built or find out what it was for.
  */
-const ASKABLE = new Set(['review', 'align', 'done'])
-
-export function isAskableColumn(phase?: string | null): boolean {
-  return ASKABLE.has(String(phase ?? '').trim().toLowerCase())
+export function isAskableColumn(phase?: string | null, phases?: PhaseLike[] | null): boolean {
+  const role = roleOf(phase, phases)
+  return role === 'review' || role === 'done'
 }

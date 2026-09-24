@@ -1,5 +1,6 @@
 import { useState, useMemo, useCallback, useEffect } from 'react'
 import { isAskableColumn } from '@/lib/review-columns'
+import { roleOf, type PhaseLike } from '@potato-cannon/shared'
 import { usePanelWidth } from '@/hooks/usePanelWidth'
 import { useLocation, useNavigate } from '@tanstack/react-router'
 import { Loader2, X, ArrowLeft, ArrowRight, Ban } from 'lucide-react'
@@ -66,11 +67,16 @@ function phaseHasAutomation(phaseConfig: TemplatePhase | undefined): boolean {
  * because there is no build to go back to yet. Nothing to send back to returns null,
  * and the control is disabled rather than hidden.
  */
-export function demoteTargetFor(sequence: string[], phase?: string): string | null {
+export function demoteTargetFor(
+  sequence: string[],
+  phase?: string,
+  phases?: PhaseLike[] | null,
+): string | null {
   if (!phase) return null
   const here = sequence.indexOf(phase)
   if (here <= 0) return null
-  const build = sequence.findIndex((name) => name.toLowerCase() === 'build')
+  // The build column by what it is for, not by being called Build.
+  const build = sequence.findIndex((name) => roleOf(name, phases) === 'build')
   if (build >= 0 && here > build) return sequence[build]
   return sequence[here - 1]
 }
@@ -170,7 +176,7 @@ export function TicketDetailPanel() {
   // Promote steps through the real phase sequence. Demote does not.
   const promotableSequence = phases ?? []
   const currentPhaseIndex = ticket ? promotableSequence.indexOf(ticket.phase) : -1
-  const demoteTarget = demoteTargetFor(promotableSequence, ticket?.phase)
+  const demoteTarget = demoteTargetFor(promotableSequence, ticket?.phase, templateConfig?.phases)
   const promoteTarget =
     currentPhaseIndex >= 0 && currentPhaseIndex < promotableSequence.length - 1
       ? promotableSequence[currentPhaseIndex + 1]
@@ -475,7 +481,7 @@ export function TicketDetailPanel() {
                       {/* Where somebody is asking whether the thing works: the review
                           column, and Done, which is where a reader comes back to a card
                           to see what it built. */}
-                      {isAskableColumn(ticket.phase) && (
+                      {isAskableColumn(ticket.phase, templateConfig?.phases) && (
                         <div className="mb-4">
                           <TryItPanel projectId={currentProjectId!} ticketId={ticket.id} />
                         </div>
