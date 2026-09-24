@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo, type KeyboardEvent } from 'react'
+import { isAskableColumn } from '@/lib/review-columns'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Send, Loader2, AlertCircle, Bell, Paperclip, Bot, Brain, ChevronUp, ChevronDown, MessageCircleQuestion, User } from 'lucide-react'
 import { renderMarkdown } from '@/lib/markdown'
@@ -441,7 +442,7 @@ export function ActivityTab({ projectId, ticketId, currentPhase: propPhase, hist
             ticket-wide Q&A session the input box below starts, with an opening
             message that points the agent at the estate's own robots/buddy.md. The
             estate governs what a buddy is; this button only asks for one. */}
-        {(currentPhase === 'Review' || currentPhase === 'Align') && !ticketChatContextId && (
+        {isAskableColumn(currentPhase) && !ticketChatContextId && (
           <div className="px-4 pb-2">
             <Button
               size="sm"

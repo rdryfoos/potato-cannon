@@ -19,6 +19,7 @@ import {
   saveArtifact,
   loadConversations,
   appendConversation,
+  recordRefusal,
 } from "../../stores/ticket.store.js";
 import { DEFAULT_PHASES } from "../../types/index.js";
 import { readQuestion, writeResponse, clearQuestion } from "../../stores/chat.store.js";
@@ -205,6 +206,11 @@ export function registerTicketRoutes(
           actor,
         });
         if (entry && !entry.allowed) {
+          // The refusal goes on the card's history. Without it the only trace is this
+          // response body, which the board throws away, and a reader opening the card
+          // later finds it sitting where it was for no stated reason.
+          recordRefusal(ticketId, resolvedPhase, entry.reason ?? "refused by the entry check", actor);
+          eventBus.emit("ticket:updated", { projectId, ticket: await getTicket(projectId, ticketId) });
           res.status(409).json({
             error: "Entry check refused",
             message: `Move to ${resolvedPhase} refused: ${entry.reason}`,
@@ -219,11 +225,15 @@ export function registerTicketRoutes(
       if (resolvedPhase && resolvedPhase !== oldPhase && !force) {
         const wipStatus = getWipStatus(projectId, resolvedPhase);
         if (wipStatus.atLimit) {
+          const reason = `${resolvedPhase} is at its limit of ${wipStatus.limit}`;
+          recordRefusal(ticketId, resolvedPhase, reason, actor);
+          eventBus.emit("ticket:updated", { projectId, ticket: await getTicket(projectId, ticketId) });
           res.status(409).json({
             error: "WIP limit reached",
             phase: resolvedPhase,
             current: wipStatus.current,
             limit: wipStatus.limit,
+            reason,
           });
           return;
         }

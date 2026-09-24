@@ -44,4 +44,6 @@ export interface TicketHistoryEntry {
   /** Who caused this transition: "hand:<user>", "auto", or "hook:<name>". Absent on
    * rows written before the actor was recorded. */
   actor?: string
+  /** A move that was refused. The card did not enter this phase; somebody tried. */
+  refused?: true
 }

@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback, useEffect } from 'react'
+import { isAskableColumn } from '@/lib/review-columns'
 import { usePanelWidth } from '@/hooks/usePanelWidth'
 import { useLocation, useNavigate } from '@tanstack/react-router'
 import { Loader2, X, ArrowLeft, ArrowRight, Ban } from 'lucide-react'
@@ -471,11 +472,10 @@ export function TicketDetailPanel() {
                 <TabsContent value="details" className="mt-0 flex-1 min-h-0">
                   <ScrollArea className="h-full">
                     <div className="px-4 pb-4">
-                      {/* Under review is when somebody is asking whether the thing
-                          works, so this is where the answer belongs. The column is
-                          named Review in the stock template and Align in an estate
-                          that renamed it; both are the same moment. */}
-                      {(ticket.phase === 'Review' || ticket.phase === 'Align') && (
+                      {/* Where somebody is asking whether the thing works: the review
+                          column, and Done, which is where a reader comes back to a card
+                          to see what it built. */}
+                      {isAskableColumn(ticket.phase) && (
                         <div className="mb-4">
                           <TryItPanel projectId={currentProjectId!} ticketId={ticket.id} />
                         </div>

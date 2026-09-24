@@ -67,6 +67,7 @@ interface HistoryRow {
   exited_at: string | null;
   reason: string | null;
   actor: string | null;
+  refused?: number | null;
 }
 
 
@@ -486,7 +487,36 @@ export class TicketStore {
       endedAt: row.exited_at || undefined,
       reason: row.reason || undefined,
       actor: row.actor || undefined,
+      ...(row.refused ? { refused: true as const } : {}),
     };
+  }
+
+  /**
+   * Record a move that did not happen.
+   *
+   * ticket_history recorded transitions, and a refusal is the one thing that is not
+   * one: the check says no, the card stays where it is, and nothing anywhere recorded
+   * that anybody tried. On 2026-09-24 a card whose work was finished and green was
+   * refused promotion and the only trace was a 409 in a response body the board threw
+   * away; a reader opening the card an hour later saw it sitting in Gate for no stated
+   * reason.
+   *
+   * A point rather than a span: entered_at and exited_at are the same instant, because
+   * nothing was entered.
+   */
+  recordRefusal(
+    ticketId: string,
+    attemptedPhase: string,
+    reason: string,
+    actor?: string,
+  ): void {
+    const now = new Date().toISOString();
+    this.db
+      .prepare(
+        `INSERT INTO ticket_history (id, ticket_id, phase, entered_at, exited_at, reason, actor, refused)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 1)`,
+      )
+      .run(randomUUID(), ticketId, attemptedPhase, now, now, reason, actor ?? null);
   }
 }
 
@@ -983,3 +1013,14 @@ export async function appendConversation(
   return conversations;
 }
 
+/**
+ * Record a move that did not happen, on the card that did not make it.
+ */
+export function recordRefusal(
+  ticketId: string,
+  attemptedPhase: string,
+  reason: string,
+  actor?: string,
+): void {
+  new TicketStore(getDatabase()).recordRefusal(ticketId, attemptedPhase, reason, actor);
+}

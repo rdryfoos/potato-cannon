@@ -1,6 +1,6 @@
 import type Database from "better-sqlite3";
 
-const CURRENT_SCHEMA_VERSION = 17;
+const CURRENT_SCHEMA_VERSION = 18;
 
 /**
  * Run database migrations.
@@ -75,6 +75,10 @@ export function runMigrations(db: Database.Database): void {
 
   if (version < 17) {
     migrateV17(db);
+  }
+
+  if (version < 18) {
+    migrateV18(db);
   }
 
   db.pragma(`user_version = ${CURRENT_SCHEMA_VERSION}`);
@@ -645,5 +649,25 @@ function migrateV17(db: Database.Database): void {
   const columns = db.pragma("table_info(projects)") as { name: string }[];
   if (!columns.some((c) => c.name === "card_prefix")) {
     db.exec(`ALTER TABLE projects ADD COLUMN card_prefix TEXT`);
+  }
+}
+
+/**
+ * V18: a history row for a move that was refused.
+ *
+ * ticket_history recorded transitions, and a refusal is the one thing that is not a
+ * transition: the entry check says no, the card does not move, and nothing anywhere
+ * records that anybody tried. On 2026-09-24 a card whose work was finished and green
+ * was refused promotion, and the only trace was a 409 in a response body that the
+ * board threw away. A reader opening the card an hour later saw a card sitting in Gate
+ * for no stated reason.
+ *
+ * A refusal row is a point rather than a span: entered_at and exited_at are the same
+ * instant, because nothing was entered.
+ */
+function migrateV18(db: Database.Database): void {
+  const columns = db.pragma("table_info(ticket_history)") as { name: string }[];
+  if (!columns.some((c) => c.name === "refused")) {
+    db.exec(`ALTER TABLE ticket_history ADD COLUMN refused INTEGER NOT NULL DEFAULT 0`);
   }
 }
