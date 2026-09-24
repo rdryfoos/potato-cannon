@@ -206,6 +206,8 @@ export function HistoryTab({ projectId, ticketId, history }: HistoryTabProps) {
     return map
   }, [artifacts, sortedHistory])
 
+  const refusedCount = sortedHistory.filter((entry) => entry.refused).length
+
   if (!history || history.length === 0) {
     return (
       <p className="text-sm text-text-muted italic py-4">No phase history</p>
@@ -216,13 +218,16 @@ export function HistoryTab({ projectId, ticketId, history }: HistoryTabProps) {
     <div className="space-y-4">
       <p className="text-xs text-text-muted">
         Showing {sortedHistory.length} phase transition{sortedHistory.length !== 1 ? 's' : ''}
+        {refusedCount > 0 && `, ${refusedCount} of them refused`}
       </p>
 
       <div className="relative">
         <div className="space-y-4">
           {sortedHistory.map((entry, i) => {
-            const duration = formatDuration(entry.at, entry.endedAt)
-            const isFirst = i === 0
+            const duration = entry.refused ? null : formatDuration(entry.at, entry.endedAt)
+            // A refusal is not a phase the card is in, so it is never the current one,
+            // whatever order it happens to sit in.
+            const isFirst = i === 0 && !entry.refused
             const isLast = i === sortedHistory.length - 1
             const phaseArtifacts = artifactsByPhase.get(i) || []
 
@@ -266,15 +271,25 @@ export function HistoryTab({ projectId, ticketId, history }: HistoryTabProps) {
                   }`}
                 />
 
-                <div className="p-3 rounded-lg bg-bg-tertiary border border-border">
+                <div
+                  className={`p-3 rounded-lg border ${
+                    entry.refused
+                      ? 'bg-red-500/5 border-red-500/40'
+                      : 'bg-bg-tertiary border-border'
+                  }`}
+                  data-testid={entry.refused ? 'history-refusal' : 'history-entry'}
+                >
                   {/* Phase name */}
                   <div className="flex items-center gap-2 mb-2">
                     <Badge
                       variant={isFirst ? 'default' : 'outline'}
-                      className={isFirst ? 'bg-accent text-white' : ''}
+                      className={isFirst ? 'bg-accent text-white' : entry.refused ? 'border-red-500/50 text-red-400' : ''}
                     >
                       {entry.phase}
                     </Badge>
+                    {entry.refused && (
+                      <span className="text-xs text-red-400">Refused</span>
+                    )}
                     {isFirst && (
                       <span className="text-xs text-text-muted">Current</span>
                     )}

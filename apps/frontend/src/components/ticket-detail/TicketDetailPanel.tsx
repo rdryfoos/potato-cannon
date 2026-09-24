@@ -1,4 +1,7 @@
 import { useState, useMemo, useCallback, useEffect } from 'react'
+import { isAskableColumn } from '@/lib/review-columns'
+import { roleOf, type PhaseLike } from '@potato-cannon/shared'
+import { usePanelWidth } from '@/hooks/usePanelWidth'
 import { useLocation, useNavigate } from '@tanstack/react-router'
 import { Loader2, X, ArrowLeft, ArrowRight, Ban } from 'lucide-react'
 import { useAppStore } from '@/stores/appStore'
@@ -31,7 +34,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { timeAgo } from '@/lib/utils'
+import { cn, timeAgo } from '@/lib/utils'
 import { DetailsTab } from './DetailsTab'
 import { TryItPanel } from './TryItPanel'
 import { SettingsTab } from './SettingsTab'
@@ -64,16 +67,22 @@ function phaseHasAutomation(phaseConfig: TemplatePhase | undefined): boolean {
  * because there is no build to go back to yet. Nothing to send back to returns null,
  * and the control is disabled rather than hidden.
  */
-export function demoteTargetFor(sequence: string[], phase?: string): string | null {
+export function demoteTargetFor(
+  sequence: string[],
+  phase?: string,
+  phases?: PhaseLike[] | null,
+): string | null {
   if (!phase) return null
   const here = sequence.indexOf(phase)
   if (here <= 0) return null
-  const build = sequence.findIndex((name) => name.toLowerCase() === 'build')
+  // The build column by what it is for, not by being called Build.
+  const build = sequence.findIndex((name) => roleOf(name, phases) === 'build')
   if (build >= 0 && here > build) return sequence[build]
   return sequence[here - 1]
 }
 
 export function TicketDetailPanel() {
+  const { width: panelWidth, dragging, onPointerDown } = usePanelWidth()
   const ticketSheetOpen = useAppStore((s) => s.ticketSheetOpen)
   const ticketSheetTicketId = useAppStore((s) => s.ticketSheetTicketId)
   const ticketSheetProjectId = useAppStore((s) => s.ticketSheetProjectId)
@@ -167,7 +176,7 @@ export function TicketDetailPanel() {
   // Promote steps through the real phase sequence. Demote does not.
   const promotableSequence = phases ?? []
   const currentPhaseIndex = ticket ? promotableSequence.indexOf(ticket.phase) : -1
-  const demoteTarget = demoteTargetFor(promotableSequence, ticket?.phase)
+  const demoteTarget = demoteTargetFor(promotableSequence, ticket?.phase, templateConfig?.phases)
   const promoteTarget =
     currentPhaseIndex >= 0 && currentPhaseIndex < promotableSequence.length - 1
       ? promotableSequence[currentPhaseIndex + 1]
@@ -249,7 +258,25 @@ export function TicketDetailPanel() {
         className="ticket-detail-panel"
         data-open={isOpen}
       >
-        <div className="flex flex-col h-full w-[480px] max-w-full">
+        {/* The edge. Dragging it leftwards widens the panel; the width is this
+            browser's own and survives a reload. */}
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize panel"
+          data-testid="panel-resize-handle"
+          onPointerDown={onPointerDown}
+          className={cn(
+            'absolute left-0 top-0 h-full w-1.5 cursor-col-resize select-none touch-none',
+            'hover:bg-accent/40 transition-colors',
+            dragging && 'bg-accent/60',
+          )}
+        />
+        <div
+          className="flex flex-col h-full max-w-full"
+          style={{ width: panelWidth }}
+          data-testid="panel-body"
+        >
           {isLoading ? (
             <div className="flex-1 flex items-center justify-center">
               <Loader2 className="h-8 w-8 animate-spin text-text-muted" />
@@ -451,11 +478,10 @@ export function TicketDetailPanel() {
                 <TabsContent value="details" className="mt-0 flex-1 min-h-0">
                   <ScrollArea className="h-full">
                     <div className="px-4 pb-4">
-                      {/* Under review is when somebody is asking whether the thing
-                          works, so this is where the answer belongs. The column is
-                          named Review in the stock template and Align in an estate
-                          that renamed it; both are the same moment. */}
-                      {(ticket.phase === 'Review' || ticket.phase === 'Align') && (
+                      {/* Where somebody is asking whether the thing works: the review
+                          column, and Done, which is where a reader comes back to a card
+                          to see what it built. */}
+                      {isAskableColumn(ticket.phase, templateConfig?.phases) && (
                         <div className="mb-4">
                           <TryItPanel projectId={currentProjectId!} ticketId={ticket.id} />
                         </div>

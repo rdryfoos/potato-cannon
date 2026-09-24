@@ -255,3 +255,53 @@ describe('TicketCard - Processing + Selected State', () => {
     expect(card.className).not.toContain('ticket-card-selected')
   })
 })
+
+describe('how a card got where it is', () => {
+  // The board told a reader where every card was and nothing about how it arrived. A
+  // card in Done that was promoted through the Gate and a card somebody dragged there
+  // looked the same, and a card that had just been refused looked exactly like a card
+  // that had never been tried.
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  afterEach(() => {
+    cleanup()
+  })
+
+  const card = (over: Record<string, unknown>) => ({ ...baseTicket, ...over })
+
+  it('outlines a card in Done as promoted', () => {
+    render(<TicketCard ticket={card({ phase: 'Done' }) as any} projectId="proj-1" />)
+    expect(document.querySelector('[data-outline="promoted"]')).not.toBeNull()
+  })
+
+  it('outlines a refused card as refused, in the column it was refused in', () => {
+    const refused = card({
+      phase: 'Gate',
+      history: [
+        { phase: 'Gate', at: '2026-09-24T01:00:00.000Z' },
+        {
+          phase: 'Align',
+          at: '2026-09-24T02:00:00.000Z',
+          endedAt: '2026-09-24T02:00:00.000Z',
+          refused: true,
+          reason: 'no such branch',
+        },
+      ],
+    })
+    render(<TicketCard ticket={refused as any} projectId="proj-1" />)
+    expect(document.querySelector('[data-outline="refused"]')).not.toBeNull()
+  })
+
+  it('outlines nothing on a card in the ordinary middle of its life', () => {
+    render(<TicketCard ticket={baseTicket as any} projectId="proj-1" />)
+    expect(document.querySelector('[data-outline]')).toBeNull()
+  })
+
+  it('keeps the blocked outline, which says something else', () => {
+    // Blocked is a state a person set. Refused is something that happened to the card.
+    render(<TicketCard ticket={card({ blocked: true }) as any} projectId="proj-1" />)
+    expect(document.querySelector('.border-red-500')).not.toBeNull()
+  })
+})

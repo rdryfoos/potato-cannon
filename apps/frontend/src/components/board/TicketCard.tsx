@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { cardOutline } from '@/lib/card-outline'
 import { useDraggable } from '@dnd-kit/core'
 import { CSS } from '@dnd-kit/utilities'
 import { Archive, Image, Clock } from 'lucide-react'
@@ -23,6 +24,7 @@ interface TicketCardProps {
 }
 
 export function TicketCard({ ticket, projectId, swimlaneColor }: TicketCardProps) {
+  const outline = cardOutline(ticket)
   const openTicketSheet = useAppStore((s) => s.openTicketSheet)
   const isProcessing = useAppStore((s) => s.isTicketProcessing(projectId, ticket.id))
   const activity = useAppStore((s) => s.getTicketActivity(projectId, ticket.id))
@@ -109,8 +111,15 @@ export function TicketCard({ ticket, projectId, swimlaneColor }: TicketCardProps
           isProcessing && 'ticket-card-processing',
           isProcessing && isSelected && 'ticket-card-selected',
           isArchiving && 'opacity-50 pointer-events-none cursor-not-allowed',
+          // How the card got where it is. Subdued green on purpose: Done is the
+          // ordinary end of a card's life, and a board of bright green cards teaches a
+          // reader to stop seeing green. A refusal is the loud one, because it is the
+          // thing nobody was told about.
+          outline === 'promoted' && 'border border-emerald-600/40 ring-1 ring-emerald-600/20',
+          outline === 'refused' && 'border-2 border-red-500/70 ring-1 ring-red-500/40',
           ticket.blocked && 'border-2 border-red-500 ring-1 ring-red-500/50'
         )}
+        data-outline={outline ?? undefined}
       >
       {/* Archive button - only for Done phase */}
       {ticket.phase === 'Done' && !ticket.archived && (

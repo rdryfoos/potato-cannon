@@ -16,6 +16,6 @@ import { defineConfig } from 'vitest/config'
 // get a red suite by standing in the wrong folder.
 export default defineConfig({
   test: {
-    projects: ['apps/frontend'],
+    projects: ['apps/frontend', 'packages/shared'],
   },
 })

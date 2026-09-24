@@ -19,6 +19,7 @@ import {
   saveArtifact,
   loadConversations,
   appendConversation,
+  recordRefusal,
 } from "../../stores/ticket.store.js";
 import { DEFAULT_PHASES } from "../../types/index.js";
 import { readQuestion, writeResponse, clearQuestion } from "../../stores/chat.store.js";
@@ -34,6 +35,7 @@ import { checkPhaseEntry } from "../../services/session/entry-check.js";
 import { chatService } from "../../services/chat.service.js";
 import { applyEdit, setLine } from "../../services/card-description.js";
 import { matchesOfferedAnswer } from "../../services/answer-match.js";
+import { refusesReworkWrite } from "../../services/rework-guard.js";
 import { CANNON, callerSpeaker } from "../../services/speaker.js";
 
 const upload = multer({
@@ -204,6 +206,11 @@ export function registerTicketRoutes(
           actor,
         });
         if (entry && !entry.allowed) {
+          // The refusal goes on the card's history. Without it the only trace is this
+          // response body, which the board throws away, and a reader opening the card
+          // later finds it sitting where it was for no stated reason.
+          recordRefusal(ticketId, resolvedPhase, entry.reason ?? "refused by the entry check", actor);
+          eventBus.emit("ticket:updated", { projectId, ticket: await getTicket(projectId, ticketId) });
           res.status(409).json({
             error: "Entry check refused",
             message: `Move to ${resolvedPhase} refused: ${entry.reason}`,
@@ -218,11 +225,15 @@ export function registerTicketRoutes(
       if (resolvedPhase && resolvedPhase !== oldPhase && !force) {
         const wipStatus = getWipStatus(projectId, resolvedPhase);
         if (wipStatus.atLimit) {
+          const reason = `${resolvedPhase} is at its limit of ${wipStatus.limit}`;
+          recordRefusal(ticketId, resolvedPhase, reason, actor);
+          eventBus.emit("ticket:updated", { projectId, ticket: await getTicket(projectId, ticketId) });
           res.status(409).json({
             error: "WIP limit reached",
             phase: resolvedPhase,
             current: wipStatus.current,
             limit: wipStatus.limit,
+            reason,
           });
           return;
         }
@@ -713,16 +724,36 @@ export function registerTicketRoutes(
       try {
         const projectId = decodeURIComponent(req.params.project);
         const ticketId = req.params.id;
-        const { blocks, lines, blocked } = req.body as {
+        const { blocks, lines, blocked, actor: declaredActor } = req.body as {
           blocks?: Array<{ name: string; text?: string | null; at?: "top" | "bottom" }>;
           lines?: Array<{ name: string; value?: string | null }>;
           blocked?: boolean;
+          actor?: string;
         };
 
         if (!blocks?.length && !lines?.length && blocked === undefined) {
           res
             .status(400)
             .json({ error: "Nothing to change: pass blocks, lines or blocked" });
+          return;
+        }
+
+        // An agent may not write a Rework block while an attempt is running.
+        //
+        // The block is an instruction the Build worker reads at the start of an
+        // attempt. Written mid-attempt it is an instruction the worker has read past,
+        // or will read halfway through, and the card then says a change was asked for
+        // that the running attempt never saw. Buddy is the caller this is for: it is
+        // answerable while a worker runs now, and answering is all it may do until the
+        // worker lands. A hand is not stopped, because a hand has chosen to.
+        const refusal = refusesReworkWrite({
+          blocks,
+          workerActive: Boolean(getActiveSessionForTicket(ticketId)) ||
+            Boolean(readQuestion(projectId, ticketId)),
+          fromAgent: (declaredActor ?? "").trim() === "agent",
+        });
+        if (refusal) {
+          res.status(409).json({ error: "Rework refused", message: refusal });
           return;
         }
 

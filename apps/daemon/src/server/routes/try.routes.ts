@@ -10,7 +10,8 @@ import { worktreePathFor } from "./thread.routes.js";
  * said.
  *
  * A reviewer can read a card's diff, its Gate and its thread, and until now could not
- * see the software run without leaving the board. This runs one file, `robots/try.sh`,
+ * see the software run without leaving the board. This runs one file, the project's own
+ * try script,
  * from inside the card's own worktree, and returns stdout, stderr and the exit code.
  *
  * What the caller may choose: which card. That is all.
@@ -19,13 +20,31 @@ import { worktreePathFor } from "./thread.routes.js";
  * interpreted by a shell: the daemon executes a fixed path inside a directory it
  * computed itself. There is no way to express "run something else" in a request, which
  * is the property that makes a button like this safe to put on a page. The estate
- * governs what `robots/try.sh` does; the daemon governs that nothing else runs.
+ * governs what that script does; the daemon governs that nothing else runs.
  */
 
 /** How long a try may take before it is killed and reported as a timeout. */
 export const TRY_TIMEOUT_SECONDS = 120;
 const MAX_OUTPUT_BYTES = 256 * 1024;
-const TRY_SCRIPT = path.join("robots", "try.sh");
+/**
+ * Where the try script lives, most recently named first.
+ *
+ * It was `robots/try.sh` and nothing else. The project this button was built for
+ * renamed that folder to `scripts/` on 2026-09-21, because "robot" is not a word its
+ * readers were meant to meet, and Try it has been pointing at a path that project no
+ * longer has ever since: the button answered "this card's branch has no robots/try.sh",
+ * which is true and useless. Both are looked for, newest first, so a project that has
+ * not renamed anything is untouched.
+ */
+export const TRY_SCRIPTS = [path.join("scripts", "try.sh"), path.join("robots", "try.sh")];
+
+/** The first try script a worktree actually has, or null. */
+export function findTryScript(worktree: string): string | null {
+  for (const candidate of TRY_SCRIPTS) {
+    if (existsSync(path.join(worktree, candidate))) return candidate;
+  }
+  return null;
+}
 
 export interface TryResult {
   ran: boolean;
@@ -40,15 +59,21 @@ export function runTryScript(
   worktree: string,
   run: typeof execFile = execFile,
 ): Promise<TryResult> {
-  const script = path.join(worktree, TRY_SCRIPT);
-  const base: TryResult = { ran: false, exitCode: null, stdout: "", stderr: "", script: TRY_SCRIPT };
-
-  if (!existsSync(script)) {
+  const found = findTryScript(worktree);
+  if (!found) {
     return Promise.resolve({
-      ...base,
-      reason: `This card's branch has no ${TRY_SCRIPT}, so there is nothing to run.`,
+      ran: false,
+      exitCode: null,
+      stdout: "",
+      stderr: "",
+      script: TRY_SCRIPTS[0],
+      reason:
+        `This card's branch has no ${TRY_SCRIPTS.join(" and no ")}, ` +
+        `so there is nothing to run.`,
     });
   }
+  const TRY_SCRIPT = found;
+  const script = path.join(worktree, TRY_SCRIPT);
 
   return new Promise((resolve) => {
     run(

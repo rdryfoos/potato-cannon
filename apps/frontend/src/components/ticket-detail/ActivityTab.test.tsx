@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, cleanup, waitFor } from '@testing-library/react'
+import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react'
 import { ActivityTab } from './ActivityTab'
 
 // Mock DOM APIs
@@ -167,9 +167,78 @@ describe('ActivityTab - Disabled Input When No Agent Active', () => {
   it('disables send button when no agent is active', () => {
     render(<ActivityTab projectId="test-project" ticketId="POT-1" />)
 
-    const sendButton = screen.getByRole('button')
+    const sendButton = screen.getByTestId('composer-send')
     expect(sendButton).toBeTruthy()
     expect((sendButton as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  describe('the To: control', () => {
+    // The composer had no say in where a message went: it went to the phase worker
+    // whenever one was running, and to Buddy only when none was. So a reader watching
+    // a card run could not ask a question about it without answering the worker
+    // instead, and Buddy was unreachable during the only part of a card's life
+    // anybody watches.
+
+    it('offers both recipients', () => {
+      render(<ActivityTab projectId="test-project" ticketId="POT-1" />)
+      expect(screen.getByTestId('composer-to-worker')).toBeTruthy()
+      expect(screen.getByTestId('composer-to-buddy')).toBeTruthy()
+    })
+
+    it('shows Buddy as the recipient when no worker is running', () => {
+      render(<ActivityTab projectId="test-project" ticketId="POT-1" />)
+      expect(screen.getByTestId('composer-to-buddy').getAttribute('aria-pressed')).toBe('true')
+      expect(screen.getByTestId('composer-to-worker').getAttribute('aria-pressed')).toBe('false')
+    })
+
+    it('cannot address a worker that is not there, and says so rather than failing later', () => {
+      render(<ActivityTab projectId="test-project" ticketId="POT-1" />)
+      const worker = screen.getByTestId('composer-to-worker') as HTMLButtonElement
+      expect(worker.disabled).toBe(true)
+      expect(worker.getAttribute('title')).toContain('No worker is running')
+    })
+
+    it('shows the worker as the recipient while one runs, which is what it used to do', () => {
+      mockIsTicketProcessing.mockReturnValue(true)
+      render(<ActivityTab projectId="test-project" ticketId="POT-1" />)
+      expect(screen.getByTestId('composer-to-worker').getAttribute('aria-pressed')).toBe('true')
+      const worker = screen.getByTestId('composer-to-worker') as HTMLButtonElement
+      expect(worker.disabled).toBe(false)
+    })
+
+    it('sends to Buddy, not into the worker session, when Buddy is chosen mid-run', async () => {
+      // The rule. A question meant for Buddy arriving at a suspended worker as the
+      // answer to its question is how BAN-1 went red on 2026-09-23.
+      const { api } = await import('@/api/client')
+      mockIsTicketProcessing.mockReturnValue(true)
+      render(<ActivityTab projectId="test-project" ticketId="POT-1" />)
+
+      fireEvent.click(screen.getByTestId('composer-to-buddy'))
+      const textarea = screen.getByPlaceholderText('Type your response...')
+      fireEvent.change(textarea, { target: { value: 'what is this card waiting on?' } })
+      fireEvent.click(screen.getByTestId('composer-send'))
+
+      await waitFor(() => {
+        expect(vi.mocked(api.startTicketChat)).toHaveBeenCalled()
+      })
+      expect(vi.mocked(api.sendTicketInput)).not.toHaveBeenCalled()
+    })
+
+    it('sends to the worker when the worker is chosen', async () => {
+      const { api } = await import('@/api/client')
+      mockIsTicketProcessing.mockReturnValue(true)
+      render(<ActivityTab projectId="test-project" ticketId="POT-1" />)
+
+      fireEvent.click(screen.getByTestId('composer-to-worker'))
+      const textarea = screen.getByPlaceholderText('Type your response...')
+      fireEvent.change(textarea, { target: { value: 'replace it' } })
+      fireEvent.click(screen.getByTestId('composer-send'))
+
+      await waitFor(() => {
+        expect(vi.mocked(api.sendTicketInput)).toHaveBeenCalled()
+      })
+      expect(vi.mocked(api.startTicketChat)).not.toHaveBeenCalled()
+    })
   })
 
   it('enables textarea when agent is processing', () => {
@@ -201,7 +270,7 @@ describe('ActivityTab - Disabled Input When No Agent Active', () => {
     const textarea = screen.getByPlaceholderText('Type your response...')
     await userEvent.type(textarea, 'Hello')
 
-    const sendButton = screen.getByRole('button')
+    const sendButton = screen.getByTestId('composer-send')
     expect((sendButton as HTMLButtonElement).disabled).toBe(false)
   })
 
@@ -310,7 +379,7 @@ describe('ActivityTab - Session Ended Clears Waiting State', () => {
     // Type and send a message to trigger isWaitingForResponse
     const textarea = screen.getByPlaceholderText('Type your response...')
     await userEvent.type(textarea, 'Hello')
-    const sendButton = screen.getByRole('button')
+    const sendButton = screen.getByTestId('composer-send')
     await userEvent.click(sendButton)
 
     // Wait for the send to complete and ThinkingIndicator to appear
