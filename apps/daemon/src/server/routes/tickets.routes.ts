@@ -34,6 +34,7 @@ import { checkPhaseEntry } from "../../services/session/entry-check.js";
 import { chatService } from "../../services/chat.service.js";
 import { applyEdit, setLine } from "../../services/card-description.js";
 import { matchesOfferedAnswer } from "../../services/answer-match.js";
+import { refusesReworkWrite } from "../../services/rework-guard.js";
 import { CANNON, callerSpeaker } from "../../services/speaker.js";
 
 const upload = multer({
@@ -713,16 +714,36 @@ export function registerTicketRoutes(
       try {
         const projectId = decodeURIComponent(req.params.project);
         const ticketId = req.params.id;
-        const { blocks, lines, blocked } = req.body as {
+        const { blocks, lines, blocked, actor: declaredActor } = req.body as {
           blocks?: Array<{ name: string; text?: string | null; at?: "top" | "bottom" }>;
           lines?: Array<{ name: string; value?: string | null }>;
           blocked?: boolean;
+          actor?: string;
         };
 
         if (!blocks?.length && !lines?.length && blocked === undefined) {
           res
             .status(400)
             .json({ error: "Nothing to change: pass blocks, lines or blocked" });
+          return;
+        }
+
+        // An agent may not write a Rework block while an attempt is running.
+        //
+        // The block is an instruction the Build worker reads at the start of an
+        // attempt. Written mid-attempt it is an instruction the worker has read past,
+        // or will read halfway through, and the card then says a change was asked for
+        // that the running attempt never saw. Buddy is the caller this is for: it is
+        // answerable while a worker runs now, and answering is all it may do until the
+        // worker lands. A hand is not stopped, because a hand has chosen to.
+        const refusal = refusesReworkWrite({
+          blocks,
+          workerActive: Boolean(getActiveSessionForTicket(ticketId)) ||
+            Boolean(readQuestion(projectId, ticketId)),
+          fromAgent: (declaredActor ?? "").trim() === "agent",
+        });
+        if (refusal) {
+          res.status(409).json({ error: "Rework refused", message: refusal });
           return;
         }
 

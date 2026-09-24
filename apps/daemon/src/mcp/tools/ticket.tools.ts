@@ -298,12 +298,19 @@ async function updateTicket(
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+      // An agent says it is one. The daemon refuses a Rework block from an agent
+      // while an attempt is running; a hand writing one has chosen to.
+      body: JSON.stringify({ ...body, actor: "agent" }),
     },
   );
   if (!response.ok) {
-    const errorBody = (await response.json().catch(() => ({}))) as { error?: string };
-    throw new Error(errorBody.error || `Failed to update ticket: ${response.statusText}`);
+    const errorBody = (await response.json().catch(() => ({}))) as {
+      error?: string;
+      message?: string;
+    };
+    throw new Error(
+      errorBody.message || errorBody.error || `Failed to update ticket: ${response.statusText}`,
+    );
   }
   const result = (await response.json()) as { changed?: string[] };
   return { changed: result.changed || [] };

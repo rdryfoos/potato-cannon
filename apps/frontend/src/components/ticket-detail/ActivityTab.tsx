@@ -5,6 +5,12 @@ import { renderMarkdown } from '@/lib/markdown'
 import { api } from '@/api/client'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
+import {
+  canAddressWorker,
+  defaultRecipient,
+  routeFor,
+  type Recipient,
+} from '@/lib/composer-route'
 import { cn, timeAgo, formatToolActivity } from '@/lib/utils'
 import { useAppStore } from '@/stores/appStore'
 import { Linkify } from '@/components/ui/linkify'
@@ -103,6 +109,10 @@ const BUDDY_OPENING =
 
 export function ActivityTab({ projectId, ticketId, currentPhase: propPhase, history, archived }: ActivityTabProps) {
   const [input, setInput] = useState('')
+  // Who the composer is addressing. null means "whatever the situation calls for",
+  // which is the worker while one runs and Buddy otherwise: what this composer did
+  // before it had a choice in it.
+  const [recipient, setRecipient] = useState<Recipient | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isWaitingForResponse, setIsWaitingForResponse] = useState(false)
   const [selectedArtifact, setSelectedArtifact] = useState<Artifact | null>(null)
@@ -281,7 +291,7 @@ export function ActivityTab({ projectId, ticketId, currentPhase: propPhase, hist
     }
   }, [projectId, ticketId])
 
-  const handleSend = useCallback(async (text: string) => {
+  const handleSend = useCallback(async (text: string, addressedTo?: Recipient) => {
     if (!text.trim() || isSubmitting) return
 
     const messageText = text.trim()
@@ -300,21 +310,27 @@ export function ActivityTab({ projectId, ticketId, currentPhase: propPhase, hist
       (old) => [...(old || []), optimisticMessage]
     )
 
+    // Where this goes is a decision, not a side effect of what happens to be running.
+    // routeFor never sends a message addressed to Buddy into the worker's session.
+    const state = { isAgentActive, ticketChatContextId }
+    const to = addressedTo ?? recipient ?? defaultRecipient(state)
+
     try {
-      if (isAgentActive) {
+      const route = routeFor(to, state)
+      if (route === 'worker-input') {
         await api.sendTicketInput(projectId, ticketId, messageText)
         setIsWaitingForResponse(true)
-      } else if (ticketChatContextId) {
+      } else if (route === 'buddy-continue' && ticketChatContextId) {
         // Continuing an existing ticket-wide Q&A conversation (see
         // ticket-chat.routes.ts) - a real follow-up, not a fresh question.
         await api.sendTicketChatInput(projectId, ticketId, ticketChatContextId, messageText)
         setIsWaitingForResponse(true)
       } else {
-        // No agent running (e.g. a manual review gate) - start a ticket-wide
-        // Q&A session instead of just posting a note. The answer arrives
-        // through the same useTicketMessage SSE subscription as everything
-        // else in this feed, since ticket-chat sessions carry the real
-        // ticketId through to askAsync same as phase agents do.
+        // A ticket-wide Q&A session. The answer arrives through the same
+        // useTicketMessage SSE subscription as everything else in this feed, since
+        // ticket-chat sessions carry the real ticketId through to askAsync same as
+        // phase agents do. This is also where a question for Buddy goes while a
+        // worker is running, which is the case the composer had no way to express.
         const response = await api.startTicketChat(projectId, ticketId, messageText)
         setTicketChatContextId(response.contextId)
         setIsWaitingForResponse(true)
@@ -333,7 +349,7 @@ export function ActivityTab({ projectId, ticketId, currentPhase: propPhase, hist
       setIsSubmitting(false)
       textareaRef.current?.focus()
     }
-  }, [projectId, ticketId, isSubmitting, isAgentActive, ticketChatContextId, queryClient])
+  }, [projectId, ticketId, isSubmitting, isAgentActive, ticketChatContextId, recipient, queryClient])
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -343,7 +359,9 @@ export function ActivityTab({ projectId, ticketId, currentPhase: propPhase, hist
   }
 
   const handleOptionClick = (option: string) => {
-    handleSend(option)
+    // An offered answer belongs to the worker that offered it, whatever the To:
+    // control is set to: the options came from its question.
+    handleSend(option, 'worker')
   }
 
   return (
@@ -452,6 +470,42 @@ export function ActivityTab({ projectId, ticketId, currentPhase: propPhase, hist
 
         {/* Input area */}
         <div className="py-3 border-t border-border shrink-0">
+          {/* To: the worker, or Buddy. Before this the composer had no say: a message
+              went to the worker whenever one was running, so a reader watching a card
+              could not ask a question about it without answering the worker instead. */}
+          <div className="flex items-center gap-2 px-4 pb-2" data-testid="composer-to">
+            <span className="text-xs text-text-muted">To:</span>
+            <div className="flex rounded-md border border-border overflow-hidden">
+              {(['worker', 'buddy'] as const).map((value) => {
+                const active = (recipient ?? defaultRecipient({ isAgentActive, ticketChatContextId })) === value
+                const unavailable = value === 'worker' && !canAddressWorker({ isAgentActive, ticketChatContextId })
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    data-testid={`composer-to-${value}`}
+                    aria-pressed={active}
+                    disabled={unavailable}
+                    onClick={() => setRecipient(value)}
+                    title={
+                      unavailable
+                        ? 'No worker is running on this card'
+                        : value === 'worker'
+                          ? 'Answer the worker running on this card'
+                          : 'Ask Buddy about this card; the worker does not see it'
+                    }
+                    className={cn(
+                      'px-2.5 py-1 text-xs capitalize transition-colors',
+                      active ? 'bg-bg-tertiary text-text-primary' : 'text-text-muted hover:text-text-primary',
+                      unavailable && 'opacity-40 cursor-not-allowed hover:text-text-muted',
+                    )}
+                  >
+                    {value}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
           <div className="flex gap-2 px-4">
             <Textarea
               ref={textareaRef}
@@ -467,6 +521,7 @@ export function ActivityTab({ projectId, ticketId, currentPhase: propPhase, hist
               disabled={!input.trim() || isSubmitting}
               size="icon"
               className="shrink-0 self-end"
+              data-testid="composer-send"
             >
               {isSubmitting || (isWaitingForResponse && !isAgentActive) ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
