@@ -2,6 +2,32 @@ import type { Phase } from '../../types/template.types.js';
 import { getProjectById, updateProjectTemplate } from '../../stores/project.store.js';
 import { getTemplateWithFullPhasesForProject } from '../../stores/template.store.js';
 import { hasProjectTemplate, copyTemplateToProject } from '../../stores/project-template.store.js';
+import { DEFAULT_PHASES } from '@potato-cannon/shared';
+
+/**
+ * The project's phases in board order, Ideas first.
+ *
+ * Every caller that needs to know whether a move went forwards or backwards needs this
+ * and there was nowhere to get it: the template holds the phases, the daemon injects
+ * Ideas and Done around them, and the answer was assembled by hand wherever it was
+ * wanted. Falls back to the default phases for a project with no template, so a caller
+ * gets an order rather than an exception.
+ */
+export async function orderedPhases(projectId: string): Promise<string[]> {
+  try {
+    const project = await getProjectById(projectId);
+    if (!project?.template) return [...DEFAULT_PHASES];
+    const template = await getTemplateWithFullPhasesForProject(projectId);
+    const names = (template?.phases ?? []).map((p: Phase) => p.name).filter(Boolean);
+    if (names.length === 0) return [...DEFAULT_PHASES];
+    const out = [...names];
+    if (out[0] !== "Ideas") out.unshift("Ideas");
+    if (out[out.length - 1] !== "Done") out.push("Done");
+    return out;
+  } catch {
+    return [...DEFAULT_PHASES];
+  }
+}
 
 /**
  * Check if a phase is automated for a project.

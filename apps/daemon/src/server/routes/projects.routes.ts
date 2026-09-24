@@ -26,6 +26,7 @@ import {
   saveProjectAgentOverride,
   getProjectAgentPrompt,
   deleteProjectAgentOverride,
+  deleteProjectTemplate,
 } from "../../stores/project-template.store.js";
 import { listTickets, updateTicket } from "../../stores/ticket.store.js";
 import { getActiveSessionForTicket } from "../../stores/session.store.js";
@@ -292,8 +293,14 @@ export function registerProjectRoutes(
     try {
       const id = decodeURIComponent(req.params.id);
       deleteProject(id);
+      // The project's own copy of its template goes with it. Left behind it is a
+      // folder keyed by an id nothing refers to any more, holding a workflow, agent
+      // overrides and a changelog; registering the same folder again mints a new id
+      // and a second copy beside the first. The project's work on disk is untouched:
+      // this is the daemon's copy of the template, not the repository.
+      const templateRemoved = await deleteProjectTemplate(id);
       await refreshProjects();
-      res.json({ ok: true });
+      res.json({ ok: true, templateRemoved });
     } catch (error) {
       res.status(500).json({ error: (error as Error).message });
     }
@@ -310,6 +317,9 @@ export function registerProjectRoutes(
         swimlaneColors?: Record<string, string>;
         wipLimits?: Record<string, number>;
         folderId?: string | null;
+        // The prefix this project's card ids carry. Cleaned in the store; "" clears it
+        // and the derivation from the display name takes over again.
+        cardPrefix?: string | null;
       };
 
       const project = getProjectById(id);

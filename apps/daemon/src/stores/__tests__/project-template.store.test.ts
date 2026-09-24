@@ -13,6 +13,141 @@ import fs from "fs/promises";
 import path from "path";
 
 describe("project-template.store", () => {
+  describe("copyTemplateToProject copies every agent", () => {
+    // It walked the phases' workers and copied what they pointed at, so an agent no
+    // phase names was never copied. ticket-qa.md is exactly that: Buddy is ad-hoc,
+    // summoned from a card rather than run by a column. Every project therefore got a
+    // template with no Buddy in it, upgrade-template reported success, and somebody
+    // who knew had to place the file by hand afterwards.
+    const templateName = "test-every-agent-" + Date.now();
+    const projectId = "test-every-agent-project-" + Date.now();
+    const templateDir = path.join(TEST_HOME, "templates", templateName);
+    const projectTemplateDir = path.join(TEST_HOME, "project-data", projectId, "template");
+
+    before(async () => {
+      await fs.mkdir(path.join(templateDir, "agents"), { recursive: true });
+      await fs.writeFile(
+        path.join(templateDir, "workflow.json"),
+        JSON.stringify({
+          name: templateName,
+          version: "1.0.0",
+          phases: [
+            {
+              id: "Build",
+              name: "Build",
+              workers: [{ id: "builder", type: "agent", source: "agents/build.md" }],
+            },
+          ],
+        }),
+      );
+      await fs.writeFile(path.join(templateDir, "agents", "build.md"), "the builder\n");
+      // Named by no phase, which is the whole point.
+      await fs.writeFile(path.join(templateDir, "agents", "ticket-qa.md"), "Buddy\n");
+      await fs.writeFile(path.join(templateDir, "agents", "artifact-qa.md"), "the artifact chat\n");
+    });
+
+    after(async () => {
+      await fs.rm(templateDir, { recursive: true, force: true }).catch(() => {});
+      await fs.rm(path.join(TEST_HOME, "project-data", projectId), {
+        recursive: true,
+        force: true,
+      }).catch(() => {});
+    });
+
+    it("copies the agent a phase names", async () => {
+      const { copyTemplateToProject } = await import("../project-template.store.js");
+      await copyTemplateToProject(projectId, templateName);
+      assert.strictEqual(
+        await fs.readFile(path.join(projectTemplateDir, "agents", "build.md"), "utf-8"),
+        "the builder\n",
+      );
+    });
+
+    it("copies ticket-qa.md, which no phase names", async () => {
+      const { copyTemplateToProject } = await import("../project-template.store.js");
+      await copyTemplateToProject(projectId, templateName);
+      assert.strictEqual(
+        await fs.readFile(path.join(projectTemplateDir, "agents", "ticket-qa.md"), "utf-8"),
+        "Buddy\n",
+      );
+    });
+
+    it("copies every other ad-hoc agent too, not just the one we went looking for", async () => {
+      const { copyTemplateToProject } = await import("../project-template.store.js");
+      await copyTemplateToProject(projectId, templateName);
+
+      const copied = (await fs.readdir(path.join(projectTemplateDir, "agents"))).sort();
+      assert.deepStrictEqual(copied, ["artifact-qa.md", "build.md", "ticket-qa.md"]);
+    });
+  });
+
+  describe("deleteProjectTemplate", () => {
+    // Deleting a project was one row out of the database and nothing on disk. This
+    // function existed from the start and nothing called it, so every deleted project
+    // left its template copy behind: a workflow, any agent overrides and a changelog,
+    // keyed by an id nothing referred to any more. Registering the same folder again
+    // produced a new id and a second copy beside the first.
+    const projectId = "test-template-delete-" + Date.now();
+    const templateDir = path.join(TEST_HOME, "project-data", projectId, "template");
+
+    beforeEach(async () => {
+      await fs.rm(path.join(TEST_HOME, "project-data", projectId), {
+        recursive: true,
+        force: true,
+      }).catch(() => {});
+    });
+
+    after(async () => {
+      await fs.rm(path.join(TEST_HOME, "project-data", projectId), {
+        recursive: true,
+        force: true,
+      }).catch(() => {});
+    });
+
+    it("removes the template directory and everything under it", async () => {
+      const { deleteProjectTemplate } = await import("../project-template.store.js");
+
+      await fs.mkdir(path.join(templateDir, "agents"), { recursive: true });
+      await fs.writeFile(path.join(templateDir, "workflow.json"), "{}");
+      await fs.writeFile(path.join(templateDir, "changelog.md"), "# changelog\n");
+      await fs.writeFile(path.join(templateDir, "agents", "build.md"), "an override\n");
+
+      assert.strictEqual(await deleteProjectTemplate(projectId), true);
+
+      await assert.rejects(fs.access(templateDir), "the template directory is gone");
+      await assert.rejects(
+        fs.access(path.join(templateDir, "agents", "build.md")),
+        "the agent override went with it",
+      );
+    });
+
+    it("says false, and does not throw, when there is nothing to remove", async () => {
+      // A project that never had a local copy is the ordinary case, not an error.
+      const { deleteProjectTemplate } = await import("../project-template.store.js");
+      assert.strictEqual(await deleteProjectTemplate(projectId), false);
+    });
+
+    it("touches no other project's template", async () => {
+      const { deleteProjectTemplate } = await import("../project-template.store.js");
+      const neighbour = projectId + "-neighbour";
+      const neighbourDir = path.join(TEST_HOME, "project-data", neighbour, "template");
+      try {
+        await fs.mkdir(templateDir, { recursive: true });
+        await fs.mkdir(neighbourDir, { recursive: true });
+        await fs.writeFile(path.join(neighbourDir, "workflow.json"), "{}");
+
+        await deleteProjectTemplate(projectId);
+
+        await fs.access(path.join(neighbourDir, "workflow.json"));
+      } finally {
+        await fs.rm(path.join(TEST_HOME, "project-data", neighbour), {
+          recursive: true,
+          force: true,
+        }).catch(() => {});
+      }
+    });
+  });
+
   describe("hasProjectAgentOverride", () => {
     let testProjectDir: string;
     const potatoDir = TEST_HOME;

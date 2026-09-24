@@ -28,11 +28,12 @@ import { updateBrainstorm } from "../../stores/brainstorm.store.js";
 import type { SessionService } from "../../services/session/index.js";
 import type { Project } from "../../types/config.types.js";
 import type { TicketPhase } from "../../types/ticket.types.js";
-import { resolveTargetPhase, getPhaseConfig } from "../../services/session/phase-config.js";
+import { resolveTargetPhase, getPhaseConfig, orderedPhases } from "../../services/session/phase-config.js";
 import { getWipStatus } from "../../services/session/wip.js";
 import { checkPhaseEntry } from "../../services/session/entry-check.js";
 import { chatService } from "../../services/chat.service.js";
-import { applyEdit } from "../../services/card-description.js";
+import { applyEdit, setLine } from "../../services/card-description.js";
+import { matchesOfferedAnswer } from "../../services/answer-match.js";
 import { CANNON, callerSpeaker } from "../../services/speaker.js";
 
 const upload = multer({
@@ -227,8 +228,31 @@ export function registerTicketRoutes(
         }
       }
 
+      // A card sent backwards says so on itself.
+      //
+      // The history tab records every move, and nobody reads it before starting work:
+      // the Build worker reads the card. A card that arrives in Build for the second
+      // time looks exactly like one arriving for the first, and the worker's only clue
+      // that a person sent it back is a Rework block somebody may or may not have
+      // written. This line is the move itself, written where the work starts.
+      let updates = { ...ticketUpdates };
+      if (resolvedPhase && resolvedPhase !== oldPhase) {
+        const phases = await orderedPhases(projectId);
+        const from = phases.indexOf(oldPhase);
+        const to = phases.indexOf(resolvedPhase);
+        if (from >= 0 && to >= 0 && to < from) {
+          const base =
+            typeof updates.description === "string" ? updates.description : oldTicket.description || "";
+          updates.description = setLine(
+            base,
+            "sent-back",
+            `from ${oldPhase} to ${resolvedPhase} by ${actor} on ${new Date().toISOString()}`,
+          );
+        }
+      }
+
       const ticket = await updateTicket(projectId, ticketId, {
-        ...ticketUpdates,
+        ...updates,
         phase: resolvedPhase,
         ...(resolvedPhase && resolvedPhase !== oldPhase ? { pendingPhase: null, actor } : {}),
       });
@@ -574,6 +598,29 @@ export function registerTicketRoutes(
 
         if (!message) {
           res.status(400).json({ error: "Missing message" });
+          return;
+        }
+
+        // What a person typed is only an answer if the worker offered it.
+        //
+        // This route took whatever arrived, wrote it as the answer and resumed the
+        // worker with it. On the second cold run a person typed "Buddy?" into the
+        // composer while BAN-1's worker was suspended on a question; that became the
+        // answer, the worker resumed on it, and the card went red. A question with no
+        // options is free text and anything answers it; a question with options has a
+        // closed set, and a message outside it is conversation.
+        const pending = readQuestion(projectId, ticketId);
+        if (pending && !matchesOfferedAnswer(pending.options, message)) {
+          const ticket = await getTicket(projectId, ticketId);
+          if (ticket?.conversationId) {
+            addMessage(ticket.conversationId, {
+              type: "user",
+              text: message,
+              speaker: { kind: "person", name: "You" },
+            });
+            eventBus.emit("ticket:updated", { projectId, ticket });
+          }
+          res.json({ success: true, answered: false, conversation: true });
           return;
         }
 

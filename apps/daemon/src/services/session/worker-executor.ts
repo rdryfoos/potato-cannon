@@ -501,7 +501,15 @@ export async function handleAgentCompletion(
   agentId: string,
   verdict: { approved: boolean; feedback?: string },
   callbacks: ExecutorCallbacks,
-  deps: { getCurrentPhase?: (projectId: string, ticketId: string) => Promise<TicketPhase | null> } = {}
+  // Injectable for the same reason getCurrentPhase is: the decisions this function
+  // makes before it touches the database are the ones worth asserting on, and reaching
+  // the database is what made them untestable.
+  deps: {
+    getCurrentPhase?: (projectId: string, ticketId: string) => Promise<TicketPhase | null>;
+    readQuestion?: typeof readQuestion;
+    getPhaseConfig?: typeof getPhaseConfig;
+    isPhaseAutomated?: typeof isPhaseAutomated;
+  } = {}
 ): Promise<void> {
   // Before anything else, including any read of phase config or worker state:
   // if the ticket has left this phase, this completion has nothing to say
@@ -517,20 +525,23 @@ export async function handleAgentCompletion(
     return;
   }
 
-  const phaseConfig = await getPhaseConfig(projectId, phase);
+  const phaseConfig = await (deps.getPhaseConfig ?? getPhaseConfig)(projectId, phase);
   if (!phaseConfig) return;
 
-  const state = await getWorkerState(projectId, ticketId);
-  if (!state) return;
-
-  // Check if this exit is a suspension (pending question exists, no response yet)
-  // A suspended session exits cleanly (code 0) after calling chat_ask with suspend: true.
-  // We must NOT advance the worker tree — the session will resume when the user responds.
-  if (exitCode === 0 && ticketId) {
-    const pendingQuestion = readQuestion(projectId, ticketId);
+  // Check if this exit is a suspension (pending question exists, no response yet).
+  //
+  // A suspended session usually exits cleanly after calling chat_ask, and this used to
+  // read `exitCode === 0 && ticketId`. A worker that asked a question and then died,
+  // or was killed, or exited non-zero for any other reason, fell straight through to
+  // the completion path with its question still unanswered on the card: the tree
+  // advanced, the card promoted, and the question went with it into a phase nobody was
+  // going to answer it from. Whether a turn ended well is a different question from
+  // whether anybody answered it, and only the second one decides where the card goes.
+  if (ticketId) {
+    const pendingQuestion = (deps.readQuestion ?? readQuestion)(projectId, ticketId);
     if (pendingQuestion) {
       // Check if phase is automated and has an answerBot
-      const automated = await isPhaseAutomated(projectId, phase);
+      const automated = await (deps.isPhaseAutomated ?? isPhaseAutomated)(projectId, phase);
       const answerBotWorker = getAnswerBotForPhase(phaseConfig);
 
       if (automated && answerBotWorker) {
@@ -547,16 +558,25 @@ export async function handleAgentCompletion(
         agentId,
         questionConversationId: pendingQuestion.conversationId,
       });
-      // Emit event so frontend knows ticket is waiting
-      const { getTicket } = await import("../../stores/ticket.store.js");
-      const ticket = getTicket(projectId, ticketId);
-      if (ticket) {
-        const { eventBus } = await import("../../utils/event-bus.js");
-        eventBus.emit("ticket:updated", { projectId, ticket });
+      // Emit event so frontend knows ticket is waiting. Best effort: telling the
+      // board is not what this branch is for, and failing to tell it must not drop
+      // the card through to the completion path.
+      try {
+        const { getTicket } = await import("../../stores/ticket.store.js");
+        const ticket = getTicket(projectId, ticketId);
+        if (ticket) {
+          const { eventBus } = await import("../../utils/event-bus.js");
+          eventBus.emit("ticket:updated", { projectId, ticket });
+        }
+      } catch {
+        // nothing to tell the board with; the card still stays put
       }
       return; // Critical: return without advancing worker state
     }
   }
+
+  const state = await getWorkerState(projectId, ticketId);
+  if (!state) return;
 
   await logToDaemon(projectId, ticketId, `Agent ${agentId} completed`, {
     exitCode,

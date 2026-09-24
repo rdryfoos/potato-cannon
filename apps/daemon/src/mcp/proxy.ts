@@ -15,25 +15,13 @@ import {
   ListToolsRequestSchema,
   type CallToolResult,
 } from '@modelcontextprotocol/sdk/types.js';
-import fs from 'fs/promises';
-import path from 'path';
-import os from 'os';
+import { getDaemonUrl } from './daemon-url.js';
 
 // Context from environment (set by session spawner)
 const PROJECT_ID = process.env.POTATO_PROJECT_ID || '';
 const TICKET_ID = process.env.POTATO_TICKET_ID || '';
 const BRAINSTORM_ID = process.env.POTATO_BRAINSTORM_ID || '';
 const EPIC_ID = process.env.POTATO_EPIC_ID || '';
-
-async function getDaemonUrl(): Promise<string> {
-  const daemonFile = path.join(os.homedir(), '.potato-cannon', 'daemon.json');
-  try {
-    const data = JSON.parse(await fs.readFile(daemonFile, 'utf-8'));
-    return `http://localhost:${data.port}`;
-  } catch {
-    return 'http://localhost:8443';
-  }
-}
 
 async function fetchTools(daemonUrl: string): Promise<unknown[]> {
   try {

@@ -52,6 +52,27 @@ function phaseHasAutomation(phaseConfig: TemplatePhase | undefined): boolean {
  * Unlike a Sheet/drawer, this component participates in the flex layout
  * and causes the main content area to shrink when open.
  */
+/**
+ * Where Demote sends a card.
+ *
+ * Not one step back. Stepping back from a review column lands on the machine column
+ * that judged the work, which re-runs the same check on the same code and arrives at
+ * the same answer. A person pressing Demote has looked at what was built and wants it
+ * different, and the only column where that happens is the one that builds.
+ *
+ * So: the build column, when the card is past it. Before it, one step back is right,
+ * because there is no build to go back to yet. Nothing to send back to returns null,
+ * and the control is disabled rather than hidden.
+ */
+export function demoteTargetFor(sequence: string[], phase?: string): string | null {
+  if (!phase) return null
+  const here = sequence.indexOf(phase)
+  if (here <= 0) return null
+  const build = sequence.findIndex((name) => name.toLowerCase() === 'build')
+  if (build >= 0 && here > build) return sequence[build]
+  return sequence[here - 1]
+}
+
 export function TicketDetailPanel() {
   const ticketSheetOpen = useAppStore((s) => s.ticketSheetOpen)
   const ticketSheetTicketId = useAppStore((s) => s.ticketSheetTicketId)
@@ -143,10 +164,10 @@ export function TicketDetailPanel() {
     [currentProjectId, ticketSheetTicketId, ticket?.phase, templateConfig, updateTicket]
   )
 
-  // Promote/Demote step through the real phase sequence.
+  // Promote steps through the real phase sequence. Demote does not.
   const promotableSequence = phases ?? []
   const currentPhaseIndex = ticket ? promotableSequence.indexOf(ticket.phase) : -1
-  const demoteTarget = currentPhaseIndex > 0 ? promotableSequence[currentPhaseIndex - 1] : null
+  const demoteTarget = demoteTargetFor(promotableSequence, ticket?.phase)
   const promoteTarget =
     currentPhaseIndex >= 0 && currentPhaseIndex < promotableSequence.length - 1
       ? promotableSequence[currentPhaseIndex + 1]
@@ -271,7 +292,7 @@ export function TicketDetailPanel() {
                         className="h-4 rounded-full px-1.5 py-0 text-[8px] leading-none border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500/20 hover:text-red-300 disabled:opacity-40"
                         disabled={!demoteTarget || updateTicket.isPending}
                         onClick={() => demoteTarget && handlePhaseChange(demoteTarget)}
-                        title={demoteTarget ? `Send back to ${demoteTarget}` : 'Already at the first phase'}
+                        title={demoteTarget ? `Send back to ${demoteTarget}` : 'Nothing to send this back to'}
                       >
                         <ArrowLeft className="h-2 w-2 mr-0.5" />
                         Demote

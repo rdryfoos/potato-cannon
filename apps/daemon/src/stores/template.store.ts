@@ -311,6 +311,26 @@ function getTemplateDir(name: string): string {
   return path.join(TEMPLATES_DIR, name);
 }
 
+/**
+ * Every agent file a template ships, as paths relative to the template root.
+ *
+ * A template's agents are not only the ones its phases name. An ad-hoc agent, Buddy
+ * in ticket-qa.md above all, belongs to the template and is named by no phase, so a
+ * copier walking the phase workers never saw it.
+ */
+export async function listTemplateAgentFiles(name: string): Promise<string[]> {
+  const agentsDir = path.join(getTemplateDir(name), "agents");
+  try {
+    const entries = await fs.readdir(agentsDir, { withFileTypes: true });
+    return entries
+      .filter((e) => e.isFile() && e.name.endsWith(".md"))
+      .map((e) => path.posix.join("agents", e.name))
+      .sort();
+  } catch {
+    return [];
+  }
+}
+
 function getWorkflowPath(name: string): string {
   return path.join(getTemplateDir(name), "workflow.json");
 }

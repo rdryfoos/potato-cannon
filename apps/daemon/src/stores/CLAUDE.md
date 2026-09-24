@@ -425,7 +425,7 @@ Per-project template storage and agent prompt overrides. Enables project-specifi
 hasProjectTemplate(projectId: string): Promise<boolean>
 getProjectTemplate(projectId: string): Promise<WorkflowTemplate | null>
 copyTemplateToProject(projectId: string, templateName: string): Promise<WorkflowTemplate>
-deleteProjectTemplate(projectId: string): Promise<void>
+deleteProjectTemplate(projectId: string): Promise<boolean>
 
 // Agent prompts
 getProjectAgentPrompt(projectId: string, agentPath: string): Promise<string>
