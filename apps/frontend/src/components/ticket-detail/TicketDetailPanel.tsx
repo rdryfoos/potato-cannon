@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback, useEffect } from 'react'
+import { usePanelWidth } from '@/hooks/usePanelWidth'
 import { useLocation, useNavigate } from '@tanstack/react-router'
 import { Loader2, X, ArrowLeft, ArrowRight, Ban } from 'lucide-react'
 import { useAppStore } from '@/stores/appStore'
@@ -31,7 +32,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { timeAgo } from '@/lib/utils'
+import { cn, timeAgo } from '@/lib/utils'
 import { DetailsTab } from './DetailsTab'
 import { TryItPanel } from './TryItPanel'
 import { SettingsTab } from './SettingsTab'
@@ -74,6 +75,7 @@ export function demoteTargetFor(sequence: string[], phase?: string): string | nu
 }
 
 export function TicketDetailPanel() {
+  const { width: panelWidth, dragging, onPointerDown } = usePanelWidth()
   const ticketSheetOpen = useAppStore((s) => s.ticketSheetOpen)
   const ticketSheetTicketId = useAppStore((s) => s.ticketSheetTicketId)
   const ticketSheetProjectId = useAppStore((s) => s.ticketSheetProjectId)
@@ -249,7 +251,25 @@ export function TicketDetailPanel() {
         className="ticket-detail-panel"
         data-open={isOpen}
       >
-        <div className="flex flex-col h-full w-[480px] max-w-full">
+        {/* The edge. Dragging it leftwards widens the panel; the width is this
+            browser's own and survives a reload. */}
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize panel"
+          data-testid="panel-resize-handle"
+          onPointerDown={onPointerDown}
+          className={cn(
+            'absolute left-0 top-0 h-full w-1.5 cursor-col-resize select-none touch-none',
+            'hover:bg-accent/40 transition-colors',
+            dragging && 'bg-accent/60',
+          )}
+        />
+        <div
+          className="flex flex-col h-full max-w-full"
+          style={{ width: panelWidth }}
+          data-testid="panel-body"
+        >
           {isLoading ? (
             <div className="flex-1 flex items-center justify-center">
               <Loader2 className="h-8 w-8 animate-spin text-text-muted" />

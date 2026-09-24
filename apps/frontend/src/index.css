@@ -935,11 +935,19 @@ button, a, [role="button"] {
   background: var(--color-sidebar);
   flex-shrink: 0;
   overflow: hidden;
+  position: relative;
   transition: width 200ms ease-in-out;
 }
 
+/* The width now comes from the panel's own body, which the reader sets by dragging
+   the edge. The transition stays for opening and closing; a drag sets the body's
+   width directly and the container follows it, so the drag does not lag by 200ms. */
 .ticket-detail-panel[data-open="true"] {
-  width: 480px;
+  width: max-content;
+}
+
+.ticket-detail-panel[data-open="true"]:has([data-testid="panel-body"]) {
+  transition: none;
 }
 
 .ticket-detail-panel[data-open="false"] {
