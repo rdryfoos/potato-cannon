@@ -2,8 +2,12 @@ import fs from "fs/promises";
 import path from "path";
 import { TASKS_DIR } from "../../config/paths.js";
 import { eventBus } from "../../utils/event-bus.js";
-import { getTicket as getTicketFromStore } from "../../stores/ticket.store.js";
-import { addMessage } from "../../stores/conversation.store.js";
+import {
+  getTicket as getTicketFromStore,
+  listTickets as listTicketsFromStore,
+} from "../../stores/ticket.store.js";
+import { addMessage, getMessages } from "../../stores/conversation.store.js";
+import { getLine } from "../../services/card-description.js";
 import type {
   ToolDefinition,
   McpContext,
@@ -19,6 +23,47 @@ export const ticketTools: ToolDefinition[] = [
     inputSchema: {
       type: "object",
       properties: {},
+      required: [],
+    },
+  },
+  {
+    name: "get_conversation",
+    description:
+      "Read this card's conversation, further back than the transcript in your prompt. " +
+      "The prompt carries the most recent messages only, so a question about something " +
+      "said earlier could not be answered from it: the agent had to say it could not " +
+      "see that far, or guess. Newest first. Use offset to page backwards.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        limit: {
+          type: "number",
+          description: "How many messages to return, newest first. Default 50, most 200.",
+        },
+        offset: {
+          type: "number",
+          description: "How many of the newest messages to skip, for paging backwards.",
+        },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "list_tickets",
+    description:
+      "List the cards on this project's board: id, title, phase, blocked, and the " +
+      "ids: line each one carries. Read-only, and it cannot move anything. Use it when " +
+      "asked what to do next, or whether something is already somebody's work: a " +
+      "reservation in the repository says an ID is waiting, and a card says somebody " +
+      "has it, and those two can disagree.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        phase: {
+          type: "string",
+          description: "Only cards in this phase. Omit for the whole board.",
+        },
+      },
       required: [],
     },
   },
@@ -397,6 +442,65 @@ export const ticketHandlers: Record<
     const ticket = await getTicket(ctx);
     return {
       content: [{ type: "text", text: JSON.stringify(ticket, null, 2) }],
+    };
+  },
+
+  get_conversation: async (ctx, args) => {
+    const ticket = getTicketFromStore(ctx.projectId, ctx.ticketId);
+    if (!ticket?.conversationId) {
+      return { content: [{ type: "text", text: "This card has no conversation yet." }] };
+    }
+    const all = getMessages(ticket.conversationId);
+    const limit = Math.min(Math.max(Number(args.limit ?? 50) || 50, 1), 200);
+    const offset = Math.max(Number(args.offset ?? 0) || 0, 0);
+
+    // Newest first, because a question about "what was said earlier" is asked from the
+    // end of the thread and pages backwards from there.
+    const newestFirst = [...all].reverse();
+    const page = newestFirst.slice(offset, offset + limit);
+    const remaining = Math.max(newestFirst.length - (offset + page.length), 0);
+
+    const lines = page.map((message) => {
+      const who = message.speaker?.name || (message.type === "user" ? "You" : "A worker");
+      return `[${message.timestamp}] ${who}: ${message.text}`;
+    });
+
+    return {
+      content: [
+        {
+          type: "text",
+          text:
+            `${all.length} message(s) on this card; showing ${page.length} ` +
+            `from ${offset} back, ${remaining} older still unread.\n\n` +
+            (lines.join("\n") || "(nothing in that range)"),
+        },
+      ],
+    };
+  },
+
+  list_tickets: async (ctx, args) => {
+    const phase = typeof args.phase === "string" ? args.phase : null;
+    const cards = listTicketsFromStore(ctx.projectId, { phase, archived: false });
+
+    const rows = cards.map((card) => {
+      const ids = getLine(card.description || "", "ids");
+      return (
+        `${card.id}\t${card.phase}${card.blocked ? "\t(blocked)" : ""}\t${card.title}` +
+        (ids ? `\n    ids: ${ids}` : "")
+      );
+    });
+
+    return {
+      content: [
+        {
+          type: "text",
+          text: rows.length
+            ? `${rows.length} card(s) on this board:\n${rows.join("\n")}`
+            : phase
+              ? `No cards in ${phase}.`
+              : "No cards on this board.",
+        },
+      ],
     };
   },
 
