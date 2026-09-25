@@ -13,10 +13,19 @@ missed for weeks. Out here the build cannot reach it. It is also no longer serve
 over HTTP: the daemon mounts `public/loupe`, not `public`.
 
 - Source: https://github.com/rdryfoos/loupe, `packages/viz`
-- Commit: 180f450 ("Merge pull request #2 from rdryfoos/feat/r5-own-status-speaks"), on main,
-  re-vendored 2026-09-23. It carries R5 as revised: a started node answers for its own
-  work, so started debt over a backlog child reads amber instead of falling through to
-  blue. Loupe's own `descent.test.ts` passes at that commit, 34 tests.
+- Commit: f10d43c ("Merge pull request #3 from rdryfoos/field-clamp-parents"), on main,
+  re-vendored 2026-09-25. It carries three changes a fresh Bang user met on the ninth
+  and tenth cold runs, seeing Loupe for the first time through the Thread tab: the
+  strand field is drawn at full size with no expand control at all, so a reader's first
+  look at the Field sub-tab is every thread rather than a box of small marks; the
+  descent's statements and evidence lines wrap to two lines instead of being cut to one,
+  with the full text on each element's own `title`; and a parent row with no test of its
+  own reads "proven through 3 criteria" where it used to read "no proof yet" beside a
+  green mark. Loupe's own suite passes at that commit, 210 tests.
+
+  It also still carries R5 as revised, from 180f450: a started node answers for its own
+  work, so started debt over a backlog child reads amber rather than falling through to
+  blue. The colour rule is unchanged by f10d43c; only the words beside it are.
 - Built with: `vite build --base=/loupe/ --outDir <here> --emptyOutDir`
 
 The `--base=/loupe/` is load-bearing. The public loupe.dryfoos.com bundle is
@@ -38,8 +47,11 @@ To refresh:
     ./node_modules/.bin/vite build --base=/loupe/ \
       --outDir <potato-cannon>/apps/daemon/public/loupe --emptyOutDir
 
-then update the commit line above, and re-apply the hand edits below. Nothing
-needs restoring: `--emptyOutDir` empties `loupe/`, and this file is not in it.
+then update the commit line above. **Do not re-apply anything by hand.** This line
+used to say "and re-apply the hand edits below", which is the opposite of what the
+section below says, and the section below is the one that is right: a hand edit in a
+build output is a change with no home. Nothing needs restoring either:
+`--emptyOutDir` empties `loupe/`, and this file is not in it.
 
 ## Hand edits that are no longer here, 2026-09-20 to 2026-09-23
 
@@ -51,13 +63,20 @@ for a day: exactly the silent loss the warning predicted, with the warning itsel
 standing as though it had worked.
 
 They are kept below as a record of what was wanted and where it belongs, which is
-Loupe's own source. Neither is in Loupe at `180f450`: `web/src/strand.ts` still writes
-the hex inline. Do not re-apply them here. A hand edit in a build output is a change
-with no home, and this section is what one costs.
+Loupe's own source. Do not re-apply them here. A hand edit in a build output is a
+change with no home, and this section is what one costs.
 
-1. **The field opens expanded.** The `O` flag that tracks the expanded state starts
-   true rather than false. The collapse control is untouched, so a reader can still
-   fold it.
+**One of the two has landed there, and the other has not.** At `f10d43c`: the field is
+expanded in Loupe's own source, and more completely than the hand edit asked for, so
+item 1 is closed. `web/src/strand.ts` still writes the hex inline, four times, so
+item 2 is still owed and is still Loupe's to fix.
+
+1. ~~**The field opens expanded.**~~ **Closed in Loupe at `f10d43c`.** The hand edit
+   flipped the expanded flag's initial value and left the collapse control alone.
+   Loupe's own ruling of 2026-09-25 went further and took the state, the control and
+   the handler out together: there is no flag to flip now, and the field is drawn at
+   full size with nothing to fold it. Kept here struck through rather than deleted,
+   because a docket line that simply vanishes reads like one nobody did.
 2. **The descent nodes are coloured by their own stage, from the palette.** Every
    inline hex in the descent SVG generator is gone, replaced by `var(--ok)`,
    `var(--brand-accent)`, `var(--debt)`, `var(--gap)` and `var(--muted)` through
@@ -76,8 +95,15 @@ with no home, and this section is what one costs.
    debt and backlog alike, which is what read as a warning colour on rows that were
    nothing of the kind.
 
-Both belong in Loupe's own source, and are docketed there.
+Item 2 belongs in Loupe's own source and is docketed there.
 
 The Thread tab drives it through the URL: `?embed=1` for the bare shell,
-`?lens=thread|descent` for which view, `?ids=` for the card's own ids, and
-`?title=` for the card's name in the rail header.
+`?lens=list|descent` for which view, `?ids=` for the card's own ids, `?title=` for the
+card's name in the rail header, and `?id=` under Descent and only under Descent.
+
+Two corrections in that line, both from cold runs. It said `?lens=thread`, and Loupe
+has no lens called thread: `main.ts` accepts "list", "map" or "descent" and ignores
+anything else, so the tab set nothing and Loupe stayed on its default. And `?id=` is
+named here now because it belongs to one sub-tab: Loupe reads it before it reads the
+lens (`descentOpen = !!deepLinkId`) and an id closes the field, so the Field sub-tab
+sends none.
