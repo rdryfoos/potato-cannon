@@ -460,10 +460,17 @@ export function TicketDetailPanel() {
               {/* Tabs */}
               <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
                 <TabsList className="mx-4 mt-4 mb-2 w-fit">
-                  <TabsTrigger value="activity">Activity</TabsTrigger>
+                  {/*
+                    Labels only. The `value` on each trigger is the tab's id: it is what
+                    `activeTab` holds, what `TabsContent` matches on, and what a stored
+                    or linked tab would name. Renaming those would be renaming the
+                    thing rather than what it is called, and nothing here asked for
+                    that. Agents was asked for once before and never carried.
+                  */}
+                  <TabsTrigger value="activity">Agents</TabsTrigger>
                   <TabsTrigger value="details">Details</TabsTrigger>
                   <TabsTrigger value="thread">Thread</TabsTrigger>
-                  <TabsTrigger value="settings">Settings</TabsTrigger>
+                  <TabsTrigger value="settings">Admin</TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="activity" className="mt-0 flex-1 flex flex-col min-h-0">
