@@ -1,5 +1,6 @@
 // src/marketplace/bootstrap.ts
 import { execSync, spawn } from 'child_process';
+import { whichSync } from "../lib/windows-exec.js";
 import path from 'path';
 import os from 'os';
 import fs from 'fs/promises';
@@ -20,7 +21,7 @@ interface CommandResult {
 
 function getClaudePath(): string | null {
   try {
-    return execSync('which claude', { encoding: 'utf-8', stdio: 'pipe' }).trim();
+    return whichSync("claude");
   } catch {
     // Fallback to common installation path
     const fallback = path.join(os.homedir(), '.local', 'bin', 'claude');

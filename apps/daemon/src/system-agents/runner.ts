@@ -1,6 +1,7 @@
 // src/system-agents/runner.ts
 
 import { execSync } from "child_process";
+import { whichSync } from "../lib/windows-exec.js";
 import path from "path";
 import crypto from "crypto";
 import pty from "node-pty";
@@ -69,7 +70,7 @@ export async function runSystemAgent<TInput>(
   // Find claude binary
   let claudePath: string;
   try {
-    claudePath = execSync("which claude", { encoding: "utf-8" }).trim();
+    claudePath = whichSync("claude");
   } catch {
     claudePath = path.join(process.env.HOME || "", ".local", "bin", "claude");
   }

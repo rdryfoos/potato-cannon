@@ -1,4 +1,5 @@
 import { execFile } from "child_process";
+import { scriptCommand } from "../../lib/windows-exec.js";
 import os from "os";
 import path from "path";
 import type { EntryCheck, WorkflowTemplate } from "../../types/template.types.js";
@@ -78,11 +79,22 @@ function lastLines(text: string): string {
  * Run one entry check. The command is executed directly, never through a
  * shell, so nothing in a ticket or template is interpreted as shell syntax.
  */
-export function runEntryCheck(check: EntryCheck, ctx: EntryCheckContext): Promise<EntryCheckResult> {
-  const [program, ...args] = check.command.map(expandHome);
+export function runEntryCheck(
+  check: EntryCheck,
+  ctx: EntryCheckContext,
+  // Both are seams for the tests and neither changes anything in use. The platform is
+  // here because the Windows behaviour has to be checkable from the Mac this was
+  // written on, and a behaviour nobody can run is a behaviour nobody can check.
+  platform: string = process.platform,
+  run: typeof execFile = execFile,
+): Promise<EntryCheckResult> {
+  const [declared, ...declaredArgs] = check.command.map(expandHome);
+  // On Windows a .sh is a text file and CreateProcess refuses it with EFTYPE, so the
+  // interpreter goes in front. Off Windows this returns exactly what it was given.
+  const { program, args } = scriptCommand(declared!, declaredArgs, platform);
   const timeoutMs = (check.timeoutSeconds ?? DEFAULT_ENTRY_CHECK_TIMEOUT_SECONDS) * 1000;
   return new Promise((resolve) => {
-    execFile(
+    run(
       program,
       args,
       {

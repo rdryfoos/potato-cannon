@@ -1,4 +1,5 @@
 import { execFile } from "child_process";
+import { scriptCommand } from "../../lib/windows-exec.js";
 import type { Express, Request, Response } from "express";
 import type { Project } from "../../types/config.types.js";
 import { existsSync } from "fs";
@@ -58,6 +59,8 @@ export interface TryResult {
 export function runTryScript(
   worktree: string,
   run: typeof execFile = execFile,
+  // A seam for the tests, for the same reason entry-check.ts has one.
+  platform: string = process.platform,
 ): Promise<TryResult> {
   const found = findTryScript(worktree);
   if (!found) {
@@ -74,11 +77,14 @@ export function runTryScript(
   }
   const TRY_SCRIPT = found;
   const script = path.join(worktree, TRY_SCRIPT);
+  // Same as the entry checks: on Windows bash runs the .sh, everywhere else the
+  // shebang does and this is the script unchanged.
+  const { program, args } = scriptCommand(script, [], platform);
 
   return new Promise((resolve) => {
     run(
-      script,
-      [],
+      program,
+      args,
       { cwd: worktree, timeout: TRY_TIMEOUT_SECONDS * 1000, maxBuffer: MAX_OUTPUT_BYTES },
       (error, stdout, stderr) => {
         const out = String(stdout ?? "");

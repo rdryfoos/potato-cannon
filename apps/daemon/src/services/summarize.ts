@@ -1,4 +1,5 @@
 import { spawn, execSync } from "child_process";
+import { whichSync } from "../lib/windows-exec.js";
 import os from "os";
 import path from "path";
 
@@ -40,7 +41,7 @@ function extractTitle(output: string): string | null {
 export async function summarizeToTitle(text: string): Promise<string> {
   let claudePath: string;
   try {
-    claudePath = execSync("which claude", { encoding: "utf-8" }).trim();
+    claudePath = whichSync("claude");
   } catch {
     claudePath = path.join(process.env.HOME || "", ".local", "bin", "claude");
   }
