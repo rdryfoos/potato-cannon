@@ -111,18 +111,17 @@ describe('the as of line: which picture this is', () => {
   })
 })
 
-describe('which view the tab asks Loupe for', () => {
-  // It asked for `?lens=thread`, and Loupe has no lens called thread: main.ts accepts
-  // "list", "map" or "descent" and silently ignores anything else, so the tab set
-  // nothing and Loupe stayed on its default, the list. The tab said Thread and drew the
-  // field, and had done since the toggle was added. The Descent view had a second
-  // problem: Loupe rests closed without an `?id=`, so setting the lens alone still drew
-  // the field.
-  const LOUPE_LENSES = ['list', 'map', 'descent']
+describe('the one view this tab shows', () => {
+  // Rik's ruling on 2026-09-25, after the twelfth cold run: one view, Loupe's thread
+  // with the rail, for this card's ids. No Field, no Descent, no sub-tab row; the
+  // Descent is out while it is reworked in Loupe.
+  //
+  // The tests replaced here asserted the sub-tab row's own behaviour: which lens each
+  // sent, that Field sent no id and Descent did, and that the row read Field and
+  // Descent. There is no row now, so they are replaced in the place they stood rather
+  // than deleted, and what stands instead is the single view's own contract.
 
   beforeEach(() => {
-    // The tab asks the daemon whether the card has a manifest before it mounts the
-    // frame. Present, so the frame is rendered and its src can be read.
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ generatedAt: '2026-09-25T10:00:00.000Z', worktreeHead: 'e'.repeat(40) }),
@@ -143,97 +142,127 @@ describe('which view the tab asks Loupe for', () => {
   const paramsOf = (container: HTMLElement) =>
     new URLSearchParams(src(container).split('?')[1] ?? '')
 
-  it('asks for a lens Loupe actually has', async () => {
-    const { container } = renderTab()
+  it('has no sub-tab row at all', async () => {
+    renderTab()
     await frameReady()
-    const lens = paramsOf(container).get('lens')
-    expect(LOUPE_LENSES).toContain(lens)
+    expect(screen.queryByTestId('thread-lens-list')).toBeNull()
+    expect(screen.queryByTestId('thread-lens-descent')).toBeNull()
+    expect(screen.queryByText('Field')).toBeNull()
+    expect(screen.queryByText('Descent')).toBeNull()
   })
 
-  it('never sends "thread" as a lens, under either sub-tab', async () => {
-    const { container } = renderTab()
-    await frameReady()
-    expect(paramsOf(container).get('lens')).not.toBe('thread')
-    expect(src(container)).not.toContain('lens=thread')
-
-    fireEvent.click(screen.getByTestId('thread-lens-descent'))
-    expect(paramsOf(container).get('lens')).not.toBe('thread')
-    expect(src(container)).not.toContain('lens=thread')
-  })
-
-  it('asks for the descent when the Descent sub-tab is chosen', async () => {
-    const { container } = renderTab()
-    await frameReady()
-    fireEvent.click(screen.getByTestId('thread-lens-descent'))
-    expect(paramsOf(container).get('lens')).toBe('descent')
-  })
-
-  // The ninth cold run (panda) read this off the screen: Field showed one thread,
-  // US-UI-10, under Loupe's own "Back to field" button. The tab was sending `id` under
-  // both sub-tabs, and the test below used to assert exactly that, from the default
-  // sub-tab, which is Field. It called what it saw "so the descent opens" and so read
-  // as a test of Descent while standing in Field.
-  //
-  // Loupe reads the id before it reads the lens: `descentOpen = !!deepLinkId`
-  // (main.ts around 431), and the embed shell draws `renderDescent(selected)` for any
-  // lens once something is open. An id is therefore not a hint about which row to
-  // highlight. It is the thing that closes the field.
-  it('sends no id under Field, which is what rests Loupe on the strand field', async () => {
+  it('asks for lens=list, which is the lens the rail is drawn over', async () => {
+    // Not because the field is wanted: an ?id= draws that row's thread on top of it.
+    // Loupe has no lens called thread and silently ignores one, which this tab has
+    // been caught sending once already.
     const { container } = renderTab()
     await frameReady()
     expect(paramsOf(container).get('lens')).toBe('list')
-    expect(paramsOf(container).get('id')).toBeNull()
-    expect([...paramsOf(container).keys()]).not.toContain('id')
   })
 
-  it('sends an id under Descent, because there the id is the subject', async () => {
+  it('asks for field=0, so Loupe offers no way back to a field this tab has not got', async () => {
     const { container } = renderTab()
     await frameReady()
-    fireEvent.click(screen.getByTestId('thread-lens-descent'))
-    expect(paramsOf(container).get('lens')).toBe('descent')
+    expect(paramsOf(container).get('field')).toBe('0')
+  })
+
+  it('always sends an id, because an id is what opens the rail', async () => {
+    const { container } = renderTab()
+    await frameReady()
     expect(paramsOf(container).get('id')).toBe('US-UI-10')
   })
 
-  it('keeps the card ids under both, because that lens is not the open flag', async () => {
-    // `ids` narrows which rows exist; `id` picks one and opens it. Field needs the
-    // first and must not have the second, and the difference is the whole of this fix.
-    const { container } = renderTab()
+  it('opens on the first id listed when the card names no story', async () => {
+    const { container } = renderTab({ description: 'ids: AC-UI-30, FR-UI-10' })
     await frameReady()
-    const all = 'US-UI-10,FR-UI-10,AC-UI-10,AC-UI-20,AC-UI-30'
-    expect(paramsOf(container).get('ids')).toBe(all)
-    fireEvent.click(screen.getByTestId('thread-lens-descent'))
-    expect(paramsOf(container).get('ids')).toBe(all)
+    expect(paramsOf(container).get('id')).toBe('AC-UI-30')
   })
 
-  it('sends no id for a card that names none, under either sub-tab', async () => {
+  it('still narrows the rows to the card, so the rail is this card and not the tree', async () => {
+    const { container } = renderTab()
+    await frameReady()
+    expect(paramsOf(container).get('ids')).toBe('US-UI-10,FR-UI-10,AC-UI-10,AC-UI-20,AC-UI-30')
+  })
+
+  it('sends no id for a card that names none, which is Loupe resting where it rests', async () => {
     const { container } = renderTab({ description: 'no ids here' })
     await frameReady()
     expect(paramsOf(container).get('id')).toBeNull()
-    fireEvent.click(screen.getByTestId('thread-lens-descent'))
-    expect(paramsOf(container).get('id')).toBeNull()
+  })
+})
+
+describe('the ids line is the picker', () => {
+  // It used to say "5 ids on this card", which is a count of the very thing the reader
+  // wants to choose between. The rail shows one id at a time, so the line that said how
+  // many there were is where choosing belongs. Nothing was added above the frame.
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ generatedAt: '2026-09-25T10:00:00.000Z', worktreeHead: 'e'.repeat(40) }),
+    }))
   })
 
-  it('leaves the frame unsandboxed, so a click inside the Field still opens a descent', async () => {
-    // Per-thread descent is Loupe's own and needs no bridge: a strand click runs
-    // `selectedId = id; descentOpen = true; render()` inside the frame (main.ts around
-    // 1564), and Loupe's "Back to field" brings the reader out again. Nothing here
-    // blocks it today, and this says so out loud, because a `sandbox` attribute added
-    // later for the look of it would take that handler's scripting away and the Field
-    // would go dead with nothing on screen to explain it.
-    const { container } = renderTab()
-    await frameReady()
-    const frame = container.querySelector('[data-testid="thread-frame"]') as HTMLIFrameElement
-    expect(frame.hasAttribute('sandbox')).toBe(false)
-    expect(frame.getAttribute('src')).toMatch(/^\/loupe\/index\.html\?/)
+  afterEach(() => {
+    cleanup()
+    vi.unstubAllGlobals()
   })
 
-  it('calls the list view what Loupe calls it', async () => {
-    // Loupe's own back control says "Back to field". One name per thing.
+  const idOf = (container: HTMLElement) =>
+    new URLSearchParams(
+      ((container.querySelector('[data-testid="thread-frame"]') as HTMLIFrameElement).src)
+        .split('?')[1] ?? '',
+    ).get('id')
+
+  const marked = () =>
+    [...screen.getByTestId('thread-id-picker').querySelectorAll('button')]
+      .filter(b => b.getAttribute('aria-current') === 'true')
+      .map(b => b.textContent)
+
+  const frameReady = () =>
+    waitFor(() => expect(screen.getByTestId('thread-frame')).toBeTruthy())
+
+  it('lists every id on the card, in card order', async () => {
     renderTab()
     await frameReady()
-    expect(screen.getByTestId('thread-lens-list').textContent).toBe('Field')
-    expect(screen.getByTestId('thread-lens-descent').textContent).toBe('Descent')
-    expect(screen.queryByText('Thread')).toBeNull()
+    const labels = [...screen.getByTestId('thread-id-picker').querySelectorAll('button')]
+      .map(b => b.textContent)
+    expect(labels).toEqual(['US-UI-10', 'FR-UI-10', 'AC-UI-10', 'AC-UI-20', 'AC-UI-30'])
+  })
+
+  it('marks the one the rail is open on, and only that one', async () => {
+    renderTab()
+    await frameReady()
+    expect(marked()).toEqual(['US-UI-10'])
+  })
+
+  it('reloads the frame on that id when one is clicked', async () => {
+    const { container } = renderTab()
+    await frameReady()
+    expect(idOf(container)).toBe('US-UI-10')
+
+    fireEvent.click(screen.getByTestId('thread-id-AC-UI-20'))
+    expect(idOf(container)).toBe('AC-UI-20')
+    expect(marked()).toEqual(['AC-UI-20'])
+  })
+
+  it('keeps the lens, the flag and the ids across a pick, so only the id moves', async () => {
+    const { container } = renderTab()
+    await frameReady()
+    fireEvent.click(screen.getByTestId('thread-id-AC-UI-10'))
+    const params = new URLSearchParams(
+      ((container.querySelector('[data-testid="thread-frame"]') as HTMLIFrameElement).src)
+        .split('?')[1] ?? '',
+    )
+    expect(params.get('lens')).toBe('list')
+    expect(params.get('field')).toBe('0')
+    expect(params.get('ids')).toBe('US-UI-10,FR-UI-10,AC-UI-10,AC-UI-20,AC-UI-30')
+  })
+
+  it('says so plainly when the card names no ids, rather than drawing an empty picker', async () => {
+    renderTab({ description: 'no ids here' })
+    await frameReady()
+    expect(screen.getByTestId('thread-id-picker').querySelectorAll('button').length).toBe(0)
+    expect(screen.getByText(/no ids: line on this card/)).toBeTruthy()
   })
 })
 
@@ -257,13 +286,13 @@ describe('which id the descent opens on', () => {
   })
 })
 
-describe('the sub-tab belongs to the card, not to the panel', () => {
+describe('the chosen id belongs to the card, not to the panel', () => {
   // The card pane is a singleton: __root.tsx renders one <TicketDetailPanel /> with no
   // key, and the card it shows comes from the store. Opening a second card changes
-  // props and remounts nothing, so this component's `lens` state outlived the card it
-  // was chosen on, and the next card's Thread tab opened on Descent before anybody had
-  // touched a sub-tab. On the eleventh cold run of Bang the first open of a fresh
-  // card's Thread tab was one thread rather than the field.
+  // props and remounts nothing, so this component's own state outlived the card it was
+  // chosen on, and the next card's Thread tab opened on the last card's choice before
+  // anybody had touched anything. On the eleventh cold run of Bang that state was the
+  // sub-tab; it is the chosen id now, and it would outlive a card the same way.
   beforeEach(() => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,
@@ -279,20 +308,21 @@ describe('the sub-tab belongs to the card, not to the panel', () => {
   const srcOf = (container: HTMLElement) =>
     (container.querySelector('[data-testid="thread-frame"]') as HTMLIFrameElement | null)?.src ?? ''
 
-  it('opens on Field, and a fresh mount opens on Field again after Descent was used', async () => {
+  it("opens on the card's story again on a fresh mount, after another id was picked", async () => {
     const first = renderTab()
     await waitFor(() => expect(screen.getByTestId('thread-frame')).toBeTruthy())
-    fireEvent.click(screen.getByTestId('thread-lens-descent'))
-    expect(new URLSearchParams(srcOf(first.container).split('?')[1]).get('lens')).toBe('descent')
+    fireEvent.click(screen.getByTestId('thread-id-AC-UI-20'))
+    expect(new URLSearchParams(srcOf(first.container).split('?')[1]).get('id')).toBe('AC-UI-20')
 
     // What a key on the ticket id buys: the next card gets a new component, so the
-    // sub-tab is the default again rather than the last card's.
+    // rail opens on that card's story rather than on the last card's pick. The state
+    // that used to outlive the card was the sub-tab; it is the chosen id now, and it
+    // would outlive it exactly the same way.
     cleanup()
     const second = renderTab()
     await waitFor(() => expect(screen.getByTestId('thread-frame')).toBeTruthy())
     const params = new URLSearchParams(srcOf(second.container).split('?')[1])
-    expect(params.get('lens')).toBe('list')
-    expect(params.get('id')).toBeNull()
+    expect(params.get('id')).toBe('US-UI-10')
   })
 
   it('is keyed by the card where it is used, so the panel cannot hold the sub-tab', () => {

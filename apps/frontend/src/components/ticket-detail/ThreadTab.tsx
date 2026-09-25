@@ -13,23 +13,19 @@ interface ThreadTabProps {
 }
 
 /**
- * The two views this tab offers, named as Loupe names them.
+ * One view, after Rik's ruling on 2026-09-25 following the twelfth cold run.
  *
- * It offered 'thread' and 'descent', and Loupe has no lens called thread:
- * `main.ts` accepts "list", "map" or "descent" and silently ignores anything else, so
- * `?lens=thread` left Loupe on its default, which is the list. The tab said Thread and
- * drew the field, and it had done since the toggle was added.
+ * This tab offered Field and Descent under a sub-tab row. It shows one thing now:
+ * Loupe's thread view with the rail, Intent over Build over Proof, for one of the
+ * card's ids at a time. The Descent is out while it is reworked in Loupe, and the
+ * Field is out because a reader who opened a card wanted this card, not the whole
+ * strand field with this card's rows somewhere in it.
  *
- * Loupe's own name for that view is the field: its back control says "Back to field".
- * One name per thing, and the fork does not get to rename somebody else's view.
+ * `lens=list` is still what the frame is sent, because `list` is the lens Loupe rests
+ * on and the rail is what an `?id=` opens on top of it. There is no lens called
+ * thread: `main.ts` takes "list", "map" or "descent" and silently ignores anything
+ * else, which is a thing this tab has already been caught doing once.
  */
-type ThreadLens = 'list' | 'descent'
-
-/** What the tab calls each view. Loupe's word, not ours. */
-const LENS_LABEL: Record<ThreadLens, string> = {
-  list: 'Field',
-  descent: 'Descent',
-}
 
 /**
  * The id the descent opens on: the card's story, or its first id.
@@ -83,11 +79,9 @@ export function parseCardIds(description?: string): string[] {
  * `embed=1` is Loupe's own embed shell -- it drops the viewer's topbar, which
  * would otherwise repeat the card header sitting directly above this frame.
  *
- * The toggle picks which of Loupe's own views the frame shows, and the two are not
- * the same drawing. Field is the strand field, every thread the card names at once,
- * and a click on any of them opens that thread's own descent inside Loupe. Descent
- * is the card-level rail, opened on the card's story and walked down four levels.
- * This tab adds nothing to either beyond narrowing the rows to the card's own ids.
+ * The frame shows one of Loupe's views: the thread, with its rail of Intent over
+ * Build over Proof, opened on one of the card's ids. This tab adds nothing to it
+ * beyond narrowing the rows to the card's own ids and choosing which one is open.
  * No card node is drawn, because a card is a lens and not a level.
  */
 /**
@@ -110,7 +104,9 @@ export function asOfLine(generatedAt: string | null, head: string | null): strin
 }
 
 export function ThreadTab({ projectId, ticketId, description, title }: ThreadTabProps) {
-  const [lens, setLens] = useState<ThreadLens>('list')
+  // Which of the card's ids the rail is opened on. The card's story to begin with,
+  // and whatever the reader picks after that.
+  const [openId, setOpenId] = useState<string | null>(null)
   const manifestUrl = `/api/tickets/${encodeURIComponent(projectId)}/${encodeURIComponent(ticketId)}/trace-manifest.json`
   const cardIds = parseCardIds(description)
 
@@ -158,55 +154,59 @@ export function ThreadTab({ projectId, ticketId, description, title }: ThreadTab
     )
   }
 
-  const params = new URLSearchParams({ manifest: manifestUrl, embed: '1', lens })
+  // The thread on show: the reader's pick, or the card's story until they pick.
+  const shownId = openId ?? descentIdFor(cardIds)
+
+  const params = new URLSearchParams({
+    manifest: manifestUrl,
+    embed: '1',
+    lens: 'list',
+    // Loupe's own flag, added for this tab. It hides "Back to field" and changes
+    // nothing else. The field is not somewhere this tab can go, so an offer of it is
+    // an offer of somewhere the reader was never coming from.
+    field: '0',
+  })
   if (cardIds.length > 0) params.set('ids', cardIds.join(','))
-  // `id` belongs to the Descent sub-tab and to nothing else.
-  //
-  // It was set for both, and that is what Field drew: one thread, with Loupe's own
-  // "Back to field" button over it. `main.ts` reads the id before it reads the lens
-  // (`descentOpen = !!deepLinkId`, around 431) and in the embed shell a lens of list
-  // with something open renders `renderDescent(selected)`, not the field. So Field
-  // asked for the field and then handed Loupe the one thing that closes it.
-  //
-  // Loupe's own rule, in its words at main.ts 415: an absent id "rests on the strand
-  // field (every visible thread at once), never a single auto-picked landmark row".
-  // Field's whole job is that resting state, so Field sends no id.
-  //
-  // Descent still sends one, because there the id is the subject: without it the
-  // descent rail has no thread to walk down. It comes from the same ids: line the
-  // lens above comes from.
-  if (lens === 'descent') {
-    const descentId = descentIdFor(cardIds)
-    if (descentId) params.set('id', descentId)
-    if (title) params.set('title', `${ticketId} ${title}`)
-  }
+  // An `?id=` is what opens the rail: `main.ts` reads it before the lens
+  // (`descentOpen = !!deepLinkId`) and draws that row's thread over the list. Without
+  // one Loupe rests on the field, which is the thing this tab no longer shows.
+  if (shownId) params.set('id', shownId)
+  if (title) params.set('title', `${ticketId} ${title}`)
 
   return (
     <div className="h-full flex flex-col min-h-0">
-      <div className="flex items-center gap-2 px-4 pb-2 shrink-0">
-        <div className="flex rounded-md border border-border overflow-hidden">
-          {(['list', 'descent'] as const).map(value => (
+      {/*
+        The ids line was a count. It is the control now.
+
+        A card carries a handful of promises and the rail shows one of them at a time,
+        so the line that said how many there were is the obvious place to choose
+        between them. Nothing is added above the frame that was not already there.
+      */}
+      <div className="flex flex-wrap items-center gap-1.5 px-4 pb-2 shrink-0"
+           data-testid="thread-id-picker">
+        {cardIds.length > 0 ? (
+          cardIds.map(id => (
             <button
-              key={value}
+              key={id}
               type="button"
-              onClick={() => setLens(value)}
-              data-testid={`thread-lens-${value}`}
+              onClick={() => setOpenId(id)}
+              data-testid={`thread-id-${id}`}
+              aria-current={id === shownId ? 'true' : undefined}
               className={cn(
-                'px-2.5 py-1 text-xs transition-colors',
-                lens === value
-                  ? 'bg-bg-tertiary text-text-primary'
-                  : 'text-text-muted hover:text-text-primary',
+                'rounded border px-2 py-0.5 font-mono text-xs transition-colors',
+                id === shownId
+                  ? 'border-accent/50 bg-bg-tertiary text-text-primary'
+                  : 'border-border text-text-muted hover:text-text-primary',
               )}
             >
-              {LENS_LABEL[value]}
+              {id}
             </button>
-          ))}
-        </div>
-        <span className="text-xs text-text-muted">
-          {cardIds.length > 0
-            ? `${cardIds.length} id${cardIds.length === 1 ? '' : 's'} on this card`
-            : 'no ids: line on this card, showing the whole manifest'}
-        </span>
+          ))
+        ) : (
+          <span className="text-xs text-text-muted">
+            no ids: line on this card, showing the whole manifest
+          </span>
+        )}
       </div>
       <p className="px-4 pb-2 text-xs text-text-muted shrink-0" data-testid="thread-as-of">
         {asOfLine(status.generatedAt, status.head)}
@@ -214,19 +214,17 @@ export function ThreadTab({ projectId, ticketId, description, title }: ThreadTab
       {/*
         No `sandbox`, deliberately, and a test says so.
 
-        Per-thread descent is Loupe's, not this tab's: clicking a strand in the Field
-        sets Loupe's own selection and opens that thread's descent
-        (`main.ts` around 1564: `selectedId = id; descentOpen = true; render()`), with
-        its "Back to field" control to come back. The fork cannot see that click and
-        does not need to. A `sandbox` attribute here, added later for the look of it,
-        would take the handler's scripting away and the Field would go dead with
-        nothing to say why, so the absence is a promise rather than an oversight.
+        Everything inside the frame that a reader can press is Loupe's: the proof
+        snippets open, the source links resolve, a row click moves the selection. A
+        `sandbox` attribute here, added later for the look of it, would take that
+        scripting away and the panel would go dead with nothing on screen to say why,
+        so the absence is a promise rather than an oversight.
 
         The frame is same-origin on purpose too: Loupe only offers source peek for an
         artifact from its own origin.
       */}
       <iframe
-        key={lens}
+        key={shownId ?? 'no-id'}
         title="Thread"
         data-testid="thread-frame"
         className="w-full flex-1 min-h-0 border-0"

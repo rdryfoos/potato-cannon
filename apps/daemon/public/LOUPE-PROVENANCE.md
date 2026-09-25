@@ -13,19 +13,21 @@ missed for weeks. Out here the build cannot reach it. It is also no longer serve
 over HTTP: the daemon mounts `public/loupe`, not `public`.
 
 - Source: https://github.com/rdryfoos/loupe, `packages/viz`
-- Commit: f10d43c ("Merge pull request #3 from rdryfoos/field-clamp-parents"), on main,
-  re-vendored 2026-09-25. It carries three changes a fresh Bang user met on the ninth
-  and tenth cold runs, seeing Loupe for the first time through the Thread tab: the
-  strand field is drawn at full size with no expand control at all, so a reader's first
-  look at the Field sub-tab is every thread rather than a box of small marks; the
-  descent's statements and evidence lines wrap to two lines instead of being cut to one,
-  with the full text on each element's own `title`; and a parent row with no test of its
-  own reads "proven through 3 criteria" where it used to read "no proof yet" beside a
-  green mark. Loupe's own suite passes at that commit, 210 tests.
+- Commit: b045352 ("Merge pull request #4 from rdryfoos/field-flag"), on main,
+  re-vendored 2026-09-25. It adds `?field=0`, which hides the single-thread view's
+  "Back to field" control and changes nothing else. The Thread tab passes it, because
+  after Rik's ruling of 2026-09-25 that tab shows one view and the field is not
+  somewhere it can go: an offer of it is an offer of somewhere the reader was never
+  coming from. Absent means reachable, so nothing that does not pass it is affected.
+  Loupe's own suite passes at that commit, 216 tests.
 
-  It also still carries R5 as revised, from 180f450: a started node answers for its own
-  work, so started debt over a backlog child reads amber rather than falling through to
-  blue. The colour rule is unchanged by f10d43c; only the words beside it are.
+  It carries everything f10d43c did, from the ninth and tenth cold runs: the strand
+  field drawn at full size with no expand control, the descent's statements and
+  evidence lines wrapped to two lines with the full text on each element's own `title`,
+  and a parent row with no test of its own reading "proven through 3 criteria" where it
+  read "no proof yet" beside a green mark. And R5 as revised, from 180f450: a started
+  node answers for its own work, so started debt over a backlog child reads amber
+  rather than falling through to blue. The colour rule is unchanged by either.
 - Built with: `vite build --base=/loupe/ --outDir <here> --emptyOutDir`
 
 The `--base=/loupe/` is load-bearing. The public loupe.dryfoos.com bundle is
@@ -97,13 +99,18 @@ item 2 is still owed and is still Loupe's to fix.
 
 Item 2 belongs in Loupe's own source and is docketed there.
 
-The Thread tab drives it through the URL: `?embed=1` for the bare shell,
-`?lens=list|descent` for which view, `?ids=` for the card's own ids, `?title=` for the
-card's name in the rail header, and `?id=` under Descent and only under Descent.
+The Thread tab drives it through the URL, and after 2026-09-25 it sends the same five
+every time: `?embed=1` for the bare shell, `?lens=list`, `?field=0`, `?ids=` for the
+card's own ids, `?title=` for the card's name, and `?id=` for the one id the rail is
+open on. There is no sub-tab row any more; the tab shows one view.
 
-Two corrections in that line, both from cold runs. It said `?lens=thread`, and Loupe
-has no lens called thread: `main.ts` accepts "list", "map" or "descent" and ignores
-anything else, so the tab set nothing and Loupe stayed on its default. And `?id=` is
-named here now because it belongs to one sub-tab: Loupe reads it before it reads the
-lens (`descentOpen = !!deepLinkId`) and an id closes the field, so the Field sub-tab
-sends none.
+`lens=list` is not a request for the field. An `?id=` draws that row's thread over the
+list, because Loupe reads the id before it reads the lens
+(`descentOpen = !!deepLinkId`). The tab always sends one, so the rail is always what
+comes up, and the reader picks which id from the line above the frame.
+
+This line has been wrong twice and both times a cold run found it. It said
+`?lens=thread`, and Loupe has no lens called thread: `main.ts` takes "list", "map" or
+"descent" and silently ignores anything else, so the tab set nothing and Loupe stayed
+on its default. And it went on saying `?id=` belonged to one sub-tab for a week after
+the sub-tabs' behaviour changed under it.
