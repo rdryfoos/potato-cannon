@@ -12,7 +12,41 @@ interface ThreadTabProps {
   title?: string
 }
 
-type ThreadLens = 'thread' | 'descent'
+/**
+ * The two views this tab offers, named as Loupe names them.
+ *
+ * It offered 'thread' and 'descent', and Loupe has no lens called thread:
+ * `main.ts` accepts "list", "map" or "descent" and silently ignores anything else, so
+ * `?lens=thread` left Loupe on its default, which is the list. The tab said Thread and
+ * drew the field, and it had done since the toggle was added.
+ *
+ * Loupe's own name for that view is the field: its back control says "Back to field".
+ * One name per thing, and the fork does not get to rename somebody else's view.
+ */
+type ThreadLens = 'list' | 'descent'
+
+/** What the tab calls each view. Loupe's word, not ours. */
+const LENS_LABEL: Record<ThreadLens, string> = {
+  list: 'Field',
+  descent: 'Descent',
+}
+
+/**
+ * The id the descent opens on: the card's story, or its first id.
+ *
+ * Loupe rests closed without an `?id=`, on purpose: `main.ts` sets
+ * `descentOpen = !!deepLinkId`, and its comment says an absent id "rests on the strand
+ * field … never a single auto-picked landmark row". That is right for somebody holding
+ * a URL and wrong for this tab, which is already looking at one card.
+ *
+ * The story, because a descent opened on a story is the whole card's strand and one
+ * opened on a criterion is a twig of it. A card with no story id opens on the first id
+ * it lists, which is the nearest thing it has to one.
+ */
+export function descentIdFor(cardIds: string[]): string | null {
+  if (cardIds.length === 0) return null
+  return cardIds.find((id) => id.startsWith('US-')) ?? cardIds[0]
+}
 
 /**
  * The ids a card carries, from its own `ids:` line.
@@ -74,7 +108,7 @@ export function asOfLine(generatedAt: string | null, head: string | null): strin
 }
 
 export function ThreadTab({ projectId, ticketId, description, title }: ThreadTabProps) {
-  const [lens, setLens] = useState<ThreadLens>('thread')
+  const [lens, setLens] = useState<ThreadLens>('list')
   const manifestUrl = `/api/tickets/${encodeURIComponent(projectId)}/${encodeURIComponent(ticketId)}/trace-manifest.json`
   const cardIds = parseCardIds(description)
 
@@ -124,25 +158,30 @@ export function ThreadTab({ projectId, ticketId, description, title }: ThreadTab
 
   const params = new URLSearchParams({ manifest: manifestUrl, embed: '1', lens })
   if (cardIds.length > 0) params.set('ids', cardIds.join(','))
+  // Without an id the descent rests closed, so the tab would set the lens and still
+  // draw the field. The id comes from the same ids: line the lens above comes from.
+  const descentId = descentIdFor(cardIds)
+  if (descentId) params.set('id', descentId)
   if (lens === 'descent' && title) params.set('title', `${ticketId} ${title}`)
 
   return (
     <div className="h-full flex flex-col min-h-0">
       <div className="flex items-center gap-2 px-4 pb-2 shrink-0">
         <div className="flex rounded-md border border-border overflow-hidden">
-          {(['thread', 'descent'] as const).map(value => (
+          {(['list', 'descent'] as const).map(value => (
             <button
               key={value}
               type="button"
               onClick={() => setLens(value)}
+              data-testid={`thread-lens-${value}`}
               className={cn(
-                'px-2.5 py-1 text-xs capitalize transition-colors',
+                'px-2.5 py-1 text-xs transition-colors',
                 lens === value
                   ? 'bg-bg-tertiary text-text-primary'
                   : 'text-text-muted hover:text-text-primary',
               )}
             >
-              {value}
+              {LENS_LABEL[value]}
             </button>
           ))}
         </div>
@@ -158,6 +197,7 @@ export function ThreadTab({ projectId, ticketId, description, title }: ThreadTab
       <iframe
         key={lens}
         title="Thread"
+        data-testid="thread-frame"
         className="w-full flex-1 min-h-0 border-0"
         src={`/loupe/index.html?${params.toString()}`}
       />
