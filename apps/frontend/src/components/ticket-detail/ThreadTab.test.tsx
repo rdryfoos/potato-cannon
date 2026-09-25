@@ -163,16 +163,63 @@ describe('which view the tab asks Loupe for', () => {
     expect(paramsOf(container).get('lens')).toBe('descent')
   })
 
-  it('sends an id when the card has ids, so the descent opens', async () => {
+  // The ninth cold run (panda) read this off the screen: Field showed one thread,
+  // US-UI-10, under Loupe's own "Back to field" button. The tab was sending `id` under
+  // both sub-tabs, and the test below used to assert exactly that, from the default
+  // sub-tab, which is Field. It called what it saw "so the descent opens" and so read
+  // as a test of Descent while standing in Field.
+  //
+  // Loupe reads the id before it reads the lens: `descentOpen = !!deepLinkId`
+  // (main.ts around 431), and the embed shell draws `renderDescent(selected)` for any
+  // lens once something is open. An id is therefore not a hint about which row to
+  // highlight. It is the thing that closes the field.
+  it('sends no id under Field, which is what rests Loupe on the strand field', async () => {
     const { container } = renderTab()
     await frameReady()
+    expect(paramsOf(container).get('lens')).toBe('list')
+    expect(paramsOf(container).get('id')).toBeNull()
+    expect([...paramsOf(container).keys()]).not.toContain('id')
+  })
+
+  it('sends an id under Descent, because there the id is the subject', async () => {
+    const { container } = renderTab()
+    await frameReady()
+    fireEvent.click(screen.getByTestId('thread-lens-descent'))
+    expect(paramsOf(container).get('lens')).toBe('descent')
     expect(paramsOf(container).get('id')).toBe('US-UI-10')
   })
 
-  it('sends no id for a card that names none, which is Loupe resting on the field', async () => {
+  it('keeps the card ids under both, because that lens is not the open flag', async () => {
+    // `ids` narrows which rows exist; `id` picks one and opens it. Field needs the
+    // first and must not have the second, and the difference is the whole of this fix.
+    const { container } = renderTab()
+    await frameReady()
+    const all = 'US-UI-10,FR-UI-10,AC-UI-10,AC-UI-20,AC-UI-30'
+    expect(paramsOf(container).get('ids')).toBe(all)
+    fireEvent.click(screen.getByTestId('thread-lens-descent'))
+    expect(paramsOf(container).get('ids')).toBe(all)
+  })
+
+  it('sends no id for a card that names none, under either sub-tab', async () => {
     const { container } = renderTab({ description: 'no ids here' })
     await frameReady()
     expect(paramsOf(container).get('id')).toBeNull()
+    fireEvent.click(screen.getByTestId('thread-lens-descent'))
+    expect(paramsOf(container).get('id')).toBeNull()
+  })
+
+  it('leaves the frame unsandboxed, so a click inside the Field still opens a descent', async () => {
+    // Per-thread descent is Loupe's own and needs no bridge: a strand click runs
+    // `selectedId = id; descentOpen = true; render()` inside the frame (main.ts around
+    // 1564), and Loupe's "Back to field" brings the reader out again. Nothing here
+    // blocks it today, and this says so out loud, because a `sandbox` attribute added
+    // later for the look of it would take that handler's scripting away and the Field
+    // would go dead with nothing on screen to explain it.
+    const { container } = renderTab()
+    await frameReady()
+    const frame = container.querySelector('[data-testid="thread-frame"]') as HTMLIFrameElement
+    expect(frame.hasAttribute('sandbox')).toBe(false)
+    expect(frame.getAttribute('src')).toMatch(/^\/loupe\/index\.html\?/)
   })
 
   it('calls the list view what Loupe calls it', async () => {

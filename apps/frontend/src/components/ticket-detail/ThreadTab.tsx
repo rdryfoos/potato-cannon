@@ -83,10 +83,12 @@ export function parseCardIds(description?: string): string[] {
  * `embed=1` is Loupe's own embed shell -- it drops the viewer's topbar, which
  * would otherwise repeat the card header sitting directly above this frame.
  *
- * The toggle picks which of Loupe's own views the frame shows. It is the same
- * drawing either way: Thread is one row's walk, Descent is the whole rail,
- * and this tab adds nothing to either beyond narrowing the rows to the card's
- * own ids. No card node is drawn, because a card is a lens and not a level.
+ * The toggle picks which of Loupe's own views the frame shows, and the two are not
+ * the same drawing. Field is the strand field, every thread the card names at once,
+ * and a click on any of them opens that thread's own descent inside Loupe. Descent
+ * is the card-level rail, opened on the card's story and walked down four levels.
+ * This tab adds nothing to either beyond narrowing the rows to the card's own ids.
+ * No card node is drawn, because a card is a lens and not a level.
  */
 /**
  * What this picture is of, in one line above the frame.
@@ -158,11 +160,26 @@ export function ThreadTab({ projectId, ticketId, description, title }: ThreadTab
 
   const params = new URLSearchParams({ manifest: manifestUrl, embed: '1', lens })
   if (cardIds.length > 0) params.set('ids', cardIds.join(','))
-  // Without an id the descent rests closed, so the tab would set the lens and still
-  // draw the field. The id comes from the same ids: line the lens above comes from.
-  const descentId = descentIdFor(cardIds)
-  if (descentId) params.set('id', descentId)
-  if (lens === 'descent' && title) params.set('title', `${ticketId} ${title}`)
+  // `id` belongs to the Descent sub-tab and to nothing else.
+  //
+  // It was set for both, and that is what Field drew: one thread, with Loupe's own
+  // "Back to field" button over it. `main.ts` reads the id before it reads the lens
+  // (`descentOpen = !!deepLinkId`, around 431) and in the embed shell a lens of list
+  // with something open renders `renderDescent(selected)`, not the field. So Field
+  // asked for the field and then handed Loupe the one thing that closes it.
+  //
+  // Loupe's own rule, in its words at main.ts 415: an absent id "rests on the strand
+  // field (every visible thread at once), never a single auto-picked landmark row".
+  // Field's whole job is that resting state, so Field sends no id.
+  //
+  // Descent still sends one, because there the id is the subject: without it the
+  // descent rail has no thread to walk down. It comes from the same ids: line the
+  // lens above comes from.
+  if (lens === 'descent') {
+    const descentId = descentIdFor(cardIds)
+    if (descentId) params.set('id', descentId)
+    if (title) params.set('title', `${ticketId} ${title}`)
+  }
 
   return (
     <div className="h-full flex flex-col min-h-0">
@@ -194,6 +211,20 @@ export function ThreadTab({ projectId, ticketId, description, title }: ThreadTab
       <p className="px-4 pb-2 text-xs text-text-muted shrink-0" data-testid="thread-as-of">
         {asOfLine(status.generatedAt, status.head)}
       </p>
+      {/*
+        No `sandbox`, deliberately, and a test says so.
+
+        Per-thread descent is Loupe's, not this tab's: clicking a strand in the Field
+        sets Loupe's own selection and opens that thread's descent
+        (`main.ts` around 1564: `selectedId = id; descentOpen = true; render()`), with
+        its "Back to field" control to come back. The fork cannot see that click and
+        does not need to. A `sandbox` attribute here, added later for the look of it,
+        would take the handler's scripting away and the Field would go dead with
+        nothing to say why, so the absence is a promise rather than an oversight.
+
+        The frame is same-origin on purpose too: Loupe only offers source peek for an
+        artifact from its own origin.
+      */}
       <iframe
         key={lens}
         title="Thread"
