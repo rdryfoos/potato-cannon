@@ -1,4 +1,5 @@
 import { execSync } from "child_process";
+import { whichSync } from "../../lib/windows-exec.js";
 import fs from "fs/promises";
 import { createWriteStream, createReadStream, existsSync } from "fs";
 import path from "path";
@@ -382,7 +383,7 @@ export class SessionService {
     // Get full path to node (required when running under Electron where PATH may not include node)
     let nodePath: string;
     try {
-      nodePath = execSync("which node", { encoding: "utf-8" }).trim();
+      nodePath = whichSync("node");
     } catch {
       // Fallback to common locations
       const fallbacks = [
@@ -439,7 +440,7 @@ export class SessionService {
 
     let claudePath: string;
     try {
-      claudePath = execSync("which claude", { encoding: "utf-8" }).trim();
+      claudePath = whichSync("claude");
     } catch {
       claudePath = path.join(process.env.HOME || "", ".local", "bin", "claude");
     }
@@ -706,7 +707,7 @@ export class SessionService {
     // Get full path to node (required when running under Electron where PATH may not include node)
     let nodePath: string;
     try {
-      nodePath = execSync("which node", { encoding: "utf-8" }).trim();
+      nodePath = whichSync("node");
     } catch {
       // Fallback to common locations
       const fallbacks = [
@@ -772,7 +773,7 @@ export class SessionService {
 
     let claudePath: string;
     try {
-      claudePath = execSync("which claude", { encoding: "utf-8" }).trim();
+      claudePath = whichSync("claude");
     } catch {
       claudePath = path.join(process.env.HOME || "", ".local", "bin", "claude");
     }
@@ -949,7 +950,7 @@ export class SessionService {
 
     let nodePath: string;
     try {
-      nodePath = execSync("which node", { encoding: "utf-8" }).trim();
+      nodePath = whichSync("node");
     } catch {
       const fallbacks = [
         path.join(process.env.HOME || "", ".nvm", "versions", "node", "v22.14.0", "bin", "node"),
@@ -1004,7 +1005,7 @@ export class SessionService {
 
     let claudePath: string;
     try {
-      claudePath = execSync("which claude", { encoding: "utf-8" }).trim();
+      claudePath = whichSync("claude");
     } catch {
       claudePath = path.join(process.env.HOME || "", ".local", "bin", "claude");
     }

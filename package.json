@@ -12,7 +12,7 @@
     "dev:frontend": "pnpm --filter @potato-cannon/frontend dev",
     "dev:desktop": "pnpm dev:daemon & pnpm --filter @potato-cannon/desktop dev",
     "build": "pnpm --filter @potato-cannon/shared --filter @potato-cannon/daemon --filter @potato-cannon/frontend build && pnpm run fix:node-pty",
-    "fix:node-pty": "chmod +x node_modules/.pnpm/node-pty@*/node_modules/node-pty/prebuilds/darwin-arm64/spawn-helper 2>/dev/null || true",
+    "fix:node-pty": "node -e \"if(process.platform!=='darwin')process.exit(0)\" && chmod +x node_modules/.pnpm/node-pty@*/node_modules/node-pty/prebuilds/darwin-arm64/spawn-helper 2>/dev/null || true",
     "build:shared": "pnpm --filter @potato-cannon/shared build",
     "build:daemon": "pnpm --filter @potato-cannon/daemon build",
     "build:frontend": "pnpm --filter @potato-cannon/frontend build",
