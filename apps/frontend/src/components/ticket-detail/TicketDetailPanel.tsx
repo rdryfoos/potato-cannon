@@ -496,7 +496,24 @@ export function TicketDetailPanel() {
                   </ScrollArea>
                 </TabsContent>
                 <TabsContent value="thread" className="mt-0 flex-1 min-h-0">
+                  {/*
+                    Keyed by the card, so the sub-tab resets with it.
+
+                    This panel is a singleton: __root.tsx renders one
+                    <TicketDetailPanel /> with no key, and the card it shows comes from
+                    the store. Closing one card and opening another changes props and
+                    remounts nothing, so ThreadTab's `lens` useState survived the
+                    change and the next card's Thread tab opened on whichever sub-tab
+                    the last card was left on, before anybody touched it. On the
+                    eleventh cold run of Bang that is what happened: the tab's first
+                    open on a fresh card was not the field.
+
+                    A key on the ticket id is the fix, and it is the right one rather
+                    than a useEffect that resets the state: the tab is about one card,
+                    so a different card is a different tab.
+                  */}
                   <ThreadTab
+                    key={ticket.id}
                     projectId={currentProjectId!}
                     ticketId={ticket.id}
                     description={ticket.description}

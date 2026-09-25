@@ -2,7 +2,12 @@ import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
 import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import React from 'react'
+import { readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { ThreadTab, asOfLine, descentIdFor, parseCardIds } from './ThreadTab'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
 
 /** BAN-1's own ids line, story first, as the daemon stores it. */
 const BAN_1_IDS = 'ids: US-UI-10, FR-UI-10, AC-UI-10, AC-UI-20, AC-UI-30'
@@ -249,5 +254,53 @@ describe('which id the descent opens on', () => {
 
   it('opens on nothing for a card that names no ids, which rests on the field', () => {
     expect(descentIdFor([])).toBeNull()
+  })
+})
+
+describe('the sub-tab belongs to the card, not to the panel', () => {
+  // The card pane is a singleton: __root.tsx renders one <TicketDetailPanel /> with no
+  // key, and the card it shows comes from the store. Opening a second card changes
+  // props and remounts nothing, so this component's `lens` state outlived the card it
+  // was chosen on, and the next card's Thread tab opened on Descent before anybody had
+  // touched a sub-tab. On the eleventh cold run of Bang the first open of a fresh
+  // card's Thread tab was one thread rather than the field.
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ generatedAt: '2026-09-25T10:00:00.000Z', worktreeHead: 'e'.repeat(40) }),
+    }))
+  })
+
+  afterEach(() => {
+    cleanup()
+    vi.unstubAllGlobals()
+  })
+
+  const srcOf = (container: HTMLElement) =>
+    (container.querySelector('[data-testid="thread-frame"]') as HTMLIFrameElement | null)?.src ?? ''
+
+  it('opens on Field, and a fresh mount opens on Field again after Descent was used', async () => {
+    const first = renderTab()
+    await waitFor(() => expect(screen.getByTestId('thread-frame')).toBeTruthy())
+    fireEvent.click(screen.getByTestId('thread-lens-descent'))
+    expect(new URLSearchParams(srcOf(first.container).split('?')[1]).get('lens')).toBe('descent')
+
+    // What a key on the ticket id buys: the next card gets a new component, so the
+    // sub-tab is the default again rather than the last card's.
+    cleanup()
+    const second = renderTab()
+    await waitFor(() => expect(screen.getByTestId('thread-frame')).toBeTruthy())
+    const params = new URLSearchParams(srcOf(second.container).split('?')[1])
+    expect(params.get('lens')).toBe('list')
+    expect(params.get('id')).toBeNull()
+  })
+
+  it('is keyed by the card where it is used, so the panel cannot hold the sub-tab', () => {
+    // Read out of the caller rather than restated: the guarantee above is only true
+    // while the key is there, and the key is in a different file from this component.
+    const panel = readFileSync(
+      join(__dirname, 'TicketDetailPanel.tsx'), 'utf8')
+    const call = panel.slice(panel.indexOf('<ThreadTab'))
+    expect(call.slice(0, call.indexOf('/>'))).toMatch(/key=\{ticket\.id\}/)
   })
 })
