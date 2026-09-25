@@ -122,6 +122,13 @@ The dev server proxies `/api/*` and `/events/*` to the Potato Cannon daemon runn
 None, as of 2026-09-20. `pnpm -r test` is green: 604 daemon tests, 154 frontend
 tests and 3 skipped.
 
+**Run it on Node 22.** `engines` and `.nvmrc` both say so, and `vitest.setup.ts`
+refuses the run with the reason on anything else. On Node 23 and later `localStorage`
+is undefined without `--localstorage-file`, and vitest keeps that empty one over
+jsdom's working one, so every persisted store throws from inside zustand and the
+suite looks broken when it is not. That is still None; it is a fact about the runner,
+not a failure, which is why it is a sentence here and not a list.
+
 The note that stood here listed 32 frontend failures from 2026-08-04, across
 `BrainstormCard.test.tsx`, `usePendingQuestions.test.ts`, `appStore.test.ts` and
 `ActivityTab.test.tsx`. Thirty of them were fixed in the work that followed and

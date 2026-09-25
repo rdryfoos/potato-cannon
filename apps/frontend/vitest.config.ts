@@ -10,6 +10,9 @@ export default defineConfig({
     }
   },
   test: {
-    environment: 'jsdom'
+    environment: 'jsdom',
+    // Refuses the run on a Node whose localStorage is the empty one, and says why.
+    // See vitest.setup.ts: one sentence instead of thirty-three zustand traces.
+    setupFiles: ['./vitest.setup.ts']
   }
 })
