@@ -18,18 +18,42 @@ function refExists(projectPath: string, ref: string): boolean {
 }
 
 /**
- * Where a card's branch starts from.
+ * Where a card's branch starts from: the project's own default branch, on this machine.
  *
- * A project with a remote branches from the remote's default branch, so a card starts
- * from what the host has rather than from whatever the local checkout happens to be
- * sitting on. A project without one branches from its own default branch at local HEAD.
+ * This used to prefer `origin/<default>` whenever an `origin` existed, on the reasoning
+ * that a card should start from what the host has rather than from whatever the local
+ * checkout happens to be sitting on. That reasoning has a hole, and on 2026-09-25 a
+ * cold run fell into it.
  *
- * The earlier version always used `origin/master`, and consulted origin even when the
- * project had no remote at all. A project with no remote and a `main` default branch
- * could satisfy neither half of that ref, so worktree creation failed for every card,
- * every time.
+ * A project whose promotions are local merges never pushes. Its `origin` is frozen at
+ * the moment it was cloned and is stale from the first commit afterwards. The Bang
+ * install commits twice, at steps 5 and 6, so by the time a reader drags their first
+ * card the local branch is two commits ahead of a remote nothing will ever update.
+ * Every card was cut from the commit before the install, so every worktree was missing
+ * `.specify/` and the checker inside it: a Spec worker refused, correctly, and the
+ * card could not move. The card's base was a commit the project had already left.
+ *
+ * So: the local default branch, which is the branch this project's promotions merge
+ * into and the one it was registered on. `origin/<default>` only when there is no local
+ * branch of that name, which is a bare or freshly-cloned checkout that has not checked
+ * anything out yet.
+ *
+ * Considered and not taken: cutting from whichever of the two is not behind the other.
+ * It is cleverer and it gets both cases right, but two branches can diverge, and then
+ * the rule needs a tiebreak that no reader of a card could predict. A board is a
+ * governance tool; a base a person cannot predict is worse than one that is sometimes
+ * behind, and a person who wants the host's newer work pulls it.
+ *
+ * `git fetch origin` goes with it. It ran on every card creation, and for a project
+ * that never pushes it was a network call to a remote whose answer was then unused:
+ * Bang's BANG.md lists what it fetches from the network, and this was not on the list.
+ * It now runs only when origin is actually going to be the base.
  */
 export function resolveStartPoint(projectPath: string): string {
+  for (const branch of ["main", "master"]) {
+    if (refExists(projectPath, branch)) return branch;
+  }
+
   let remotes: string[] = [];
   try {
     remotes = git(projectPath, "git remote").split("\n").map((r) => r.trim()).filter(Boolean);
@@ -53,12 +77,9 @@ export function resolveStartPoint(projectPath: string): string {
     for (const branch of ["main", "master"]) {
       if (refExists(projectPath, `origin/${branch}`)) return `origin/${branch}`;
     }
-    console.warn("[worktree] origin is configured but has no usable default branch; using the local one");
+    console.warn("[worktree] origin is configured but has no usable default branch; using HEAD");
   }
 
-  for (const branch of ["main", "master"]) {
-    if (refExists(projectPath, branch)) return branch;
-  }
   return "HEAD";
 }
 
