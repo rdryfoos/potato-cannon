@@ -1,5 +1,26 @@
-import { describe, it, expect } from 'vitest'
-import { asOfLine, parseCardIds } from './ThreadTab'
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
+import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import React from 'react'
+import { ThreadTab, asOfLine, descentIdFor, parseCardIds } from './ThreadTab'
+
+/** BAN-1's own ids line, story first, as the daemon stores it. */
+const BAN_1_IDS = 'ids: US-UI-10, FR-UI-10, AC-UI-10, AC-UI-20, AC-UI-30'
+
+function renderTab(props: { description?: string } = {}) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  const wrapper = ({ children }: { children: React.ReactNode }) =>
+    React.createElement(QueryClientProvider, { client }, children)
+  return render(
+    <ThreadTab
+      projectId="bang"
+      ticketId="BAN-1"
+      description={props.description ?? BAN_1_IDS}
+      title="Lend and return in the browser"
+    />,
+    { wrapper },
+  )
+}
 
 describe('the card lens: a card names its own ids', () => {
   it('reads the ids line a real card carries', () => {
@@ -82,5 +103,104 @@ describe('the as of line: which picture this is', () => {
 
   it('still says both halves when it knows neither', () => {
     expect(asOfLine(null, null)).toBe('as of an unrecorded time, worktree commit unknown')
+  })
+})
+
+describe('which view the tab asks Loupe for', () => {
+  // It asked for `?lens=thread`, and Loupe has no lens called thread: main.ts accepts
+  // "list", "map" or "descent" and silently ignores anything else, so the tab set
+  // nothing and Loupe stayed on its default, the list. The tab said Thread and drew the
+  // field, and had done since the toggle was added. The Descent view had a second
+  // problem: Loupe rests closed without an `?id=`, so setting the lens alone still drew
+  // the field.
+  const LOUPE_LENSES = ['list', 'map', 'descent']
+
+  beforeEach(() => {
+    // The tab asks the daemon whether the card has a manifest before it mounts the
+    // frame. Present, so the frame is rendered and its src can be read.
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ generatedAt: '2026-09-25T10:00:00.000Z', worktreeHead: 'e'.repeat(40) }),
+    }))
+  })
+
+  afterEach(() => {
+    cleanup()
+    vi.unstubAllGlobals()
+  })
+
+  const frameReady = () =>
+    waitFor(() => expect(screen.getByTestId('thread-frame')).toBeTruthy())
+
+  const src = (container: HTMLElement) =>
+    (container.querySelector('[data-testid="thread-frame"]') as HTMLIFrameElement | null)?.src ?? ''
+
+  const paramsOf = (container: HTMLElement) =>
+    new URLSearchParams(src(container).split('?')[1] ?? '')
+
+  it('asks for a lens Loupe actually has', async () => {
+    const { container } = renderTab()
+    await frameReady()
+    const lens = paramsOf(container).get('lens')
+    expect(LOUPE_LENSES).toContain(lens)
+  })
+
+  it('never sends "thread" as a lens, under either sub-tab', async () => {
+    const { container } = renderTab()
+    await frameReady()
+    expect(paramsOf(container).get('lens')).not.toBe('thread')
+    expect(src(container)).not.toContain('lens=thread')
+
+    fireEvent.click(screen.getByTestId('thread-lens-descent'))
+    expect(paramsOf(container).get('lens')).not.toBe('thread')
+    expect(src(container)).not.toContain('lens=thread')
+  })
+
+  it('asks for the descent when the Descent sub-tab is chosen', async () => {
+    const { container } = renderTab()
+    await frameReady()
+    fireEvent.click(screen.getByTestId('thread-lens-descent'))
+    expect(paramsOf(container).get('lens')).toBe('descent')
+  })
+
+  it('sends an id when the card has ids, so the descent opens', async () => {
+    const { container } = renderTab()
+    await frameReady()
+    expect(paramsOf(container).get('id')).toBe('US-UI-10')
+  })
+
+  it('sends no id for a card that names none, which is Loupe resting on the field', async () => {
+    const { container } = renderTab({ description: 'no ids here' })
+    await frameReady()
+    expect(paramsOf(container).get('id')).toBeNull()
+  })
+
+  it('calls the list view what Loupe calls it', async () => {
+    // Loupe's own back control says "Back to field". One name per thing.
+    renderTab()
+    await frameReady()
+    expect(screen.getByTestId('thread-lens-list').textContent).toBe('Field')
+    expect(screen.getByTestId('thread-lens-descent').textContent).toBe('Descent')
+    expect(screen.queryByText('Thread')).toBeNull()
+  })
+})
+
+describe('which id the descent opens on', () => {
+  // A descent opened on a story is the whole card's strand; one opened on a criterion
+  // is a twig of it. The ids come from the same ids: line the lens comes from.
+  it("opens on the card's story when it has one", () => {
+    expect(descentIdFor(['US-UI-10', 'FR-UI-10', 'AC-UI-10'])).toBe('US-UI-10')
+  })
+
+  it('finds the story wherever it sits on the line', () => {
+    expect(descentIdFor(['AC-UI-10', 'US-UI-10'])).toBe('US-UI-10')
+  })
+
+  it('opens on the first id listed when the card names no story', () => {
+    expect(descentIdFor(['NFR-ENG-10', 'AC-ENG-10'])).toBe('NFR-ENG-10')
+  })
+
+  it('opens on nothing for a card that names no ids, which rests on the field', () => {
+    expect(descentIdFor([])).toBeNull()
   })
 })
