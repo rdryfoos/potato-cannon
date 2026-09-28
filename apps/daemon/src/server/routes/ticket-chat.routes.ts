@@ -346,6 +346,24 @@ function buildTicketChatMcpConfig(projectId: string, ticketId: string, contextId
   };
 }
 
+/**
+ * The pen, for a card in Review, and nothing else.
+ *
+ * Review is the one column where a reader is looking at finished work and saying what
+ * they want different, and the agent on the card is the one that has read it. Every
+ * other column has a worker of its own, or has not started: an agent writing into
+ * those is an agent writing over somebody mid-attempt, or ahead of the spec that
+ * would have said what to write.
+ *
+ * Returns the card's own worktree, which is where the writes go and what the session
+ * runs in. `null` is read-only, which is every other phase.
+ */
+export function penFor(phase: string | undefined, projectPath: string, ticketId: string):
+  { worktree: string } | null {
+  if ((phase ?? "").trim().toLowerCase() !== "review") return null;
+  return { worktree: path.join(projectPath, ".potato", "worktrees", ticketId) };
+}
+
 async function spawnTicketChatSession(
   session: ArtifactChatSession,
   prompt: string,
@@ -363,8 +381,10 @@ async function spawnTicketChatSession(
   };
 
   const mcpConfig = buildTicketChatMcpConfig(projectId, ticketId, session.contextId);
-  const args = buildAdhocChatArgs(mcpConfig, prompt);
-  runAdhocChatProcess(session, args, projectPath, projectId, ticketId, "ticket-qa", meta);
+  const pen = penFor((await getTicket(projectId, ticketId))?.phase, projectPath, ticketId);
+  const args = buildAdhocChatArgs(mcpConfig, prompt, undefined, pen);
+  runAdhocChatProcess(
+    session, args, pen?.worktree ?? projectPath, projectId, ticketId, "ticket-qa", meta);
 }
 
 async function resumeTicketChatSession(
@@ -387,10 +407,14 @@ async function resumeTicketChatSession(
   };
 
   const mcpConfig = buildTicketChatMcpConfig(projectId, ticketId, session.contextId);
-  const args = buildAdhocChatArgs(mcpConfig, message, claudeSessionId);
+  // Asked again on resume rather than remembered: a card that left Review while the
+  // panel was open is a card whose agent should not still be holding a pen.
+  const pen = penFor((await getTicket(projectId, ticketId))?.phase, projectPath, ticketId);
+  const args = buildAdhocChatArgs(mcpConfig, message, claudeSessionId, pen);
 
   artifactChatStore.updateActivity(session.contextId);
-  runAdhocChatProcess(session, args, projectPath, projectId, ticketId, "ticket-qa", meta);
+  runAdhocChatProcess(
+    session, args, pen?.worktree ?? projectPath, projectId, ticketId, "ticket-qa", meta);
 }
 
 // Saves the message this route was handed into the ticket's real conversation

@@ -1,6 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react'
 import { ActivityTab } from './ActivityTab'
+import { readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 // Mock DOM APIs
 HTMLElement.prototype.scrollIntoView = vi.fn()
@@ -515,5 +518,41 @@ describe('ActivityTab - every message names its speaker', () => {
     const bubble = container.querySelector('[data-speaker="cannon"]')!.closest('div.max-w-\\[85\\%\\]')!
     expect(bubble.className).not.toContain('bg-accent/50')
     expect(bubble.parentElement!.className).toContain('justify-start')
+  })
+})
+
+describe('the footer says what Buddy can and cannot do', () => {
+  // It said "It cannot write or reach the network." while Buddy was being handed a pen
+  // for cards in Review. A footer that contradicts what just happened to a branch is
+  // the one sentence a reader checks when deciding whether to trust it.
+  //
+  // Read out of the source rather than rendered, because the panel needs a card, a
+  // store and a query client to draw, and what is under test is a sentence.
+  // From this file, not from the working directory: vitest runs with cwd at the repo
+  // root from the root config and at apps/frontend under --filter, and a path built
+  // from cwd is right in one of those and ENOENT in the other.
+  const source = readFileSync(
+    join(dirname(fileURLToPath(import.meta.url)), 'ActivityTab.tsx'),
+    'utf8',
+  )
+  const footer = ' '.concat(source.split('Reads this card and its branch')[1] ?? '')
+    .split('</')[0]
+    .replace(/\s+/g, ' ')
+    .replace(/&apos;/g, "'")
+
+  it('no longer says it cannot write', () => {
+    expect(footer).not.toMatch(/cannot write or\s*reach the network/)
+  })
+
+  it('says it can make a change you ask for, in Review, on the branch, under the Gate', () => {
+    expect(footer).toContain('On a card in Review it can also make a change you ask for')
+    expect(footer).toContain("on the card's own branch")
+    expect(footer).toContain('under the Gate')
+  })
+
+  it('says the three things it cannot do', () => {
+    expect(footer).toContain('cannot change what the card promises')
+    expect(footer).toContain("cannot write outside the files the card's ids govern")
+    expect(footer).toContain('cannot reach the network')
   })
 })
