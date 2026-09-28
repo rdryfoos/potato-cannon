@@ -18,18 +18,25 @@ import { refusesReworkWrite } from "../rework-guard.js";
 describe("a Rework block written mid-attempt", () => {
   const rework = [{ name: "rework" }];
 
-  it("refuses an agent while a worker is on the card", () => {
-    const refusal = refusesReworkWrite({ blocks: rework, workerActive: true, fromAgent: true });
-    assert.ok(refusal, "expected a refusal");
-    assert.match(String(refusal), /attempt is running/);
-    assert.match(String(refusal), /when the worker lands/);
+  it("refuses an agent, whether or not a worker is on the card", () => {
+    // It used to turn on whether a worker was running, which was the narrower rule
+    // while Buddy could write the block but should not have written it mid-attempt.
+    // As of 2026-09-28 the block is a hand's: a change within the card's promises
+    // Buddy makes on the branch, and one outside them it refuses by naming the ID
+    // that would have to be created. Neither is a Rework block, so a quiet card is
+    // not a reason to hand an agent the pen for the wrong thing.
+    for (const workerActive of [true, false]) {
+      const refusal = refusesReworkWrite({ blocks: rework, workerActive, fromAgent: true });
+      assert.ok(refusal, `expected a refusal with workerActive=${workerActive}`);
+      assert.match(String(refusal), /a hand's/);
+      assert.match(String(refusal), /make it on the branch/);
+      assert.match(String(refusal), /name the ID it would need/);
+    }
   });
 
-  it("lets the agent write it once the worker has landed", () => {
-    assert.strictEqual(
-      refusesReworkWrite({ blocks: rework, workerActive: false, fromAgent: true }),
-      null,
-    );
+  it("does not decide on workerActive at all, so the field may be absent", () => {
+    const refusal = refusesReworkWrite({ blocks: rework, fromAgent: true });
+    assert.ok(refusal, "expected a refusal with no workerActive given");
   });
 
   it("does not stop a hand, which has chosen to", () => {

@@ -133,7 +133,26 @@ export function runAdhocChatProcess(
   });
 }
 
-export function buildAdhocChatArgs(mcpConfig: unknown, promptOrMessage: string, resumeClaudeSessionId?: string): string[] {
+/**
+ * What an ad-hoc agent may do, and where.
+ *
+ * `pen` is the card's own worktree, and it is passed only for a card in Review. A
+ * reader looking at a finished card will sometimes want something different, and what
+ * they say is the change itself; the agent already on the card is the one that has
+ * read it. `cannon-template/agents/ticket-qa.md` carries the rules it writes under:
+ * the card's branch, files the card's IDs govern, commit, tests, the Gate after every
+ * write, and the card staying in Review.
+ *
+ * The powers are given in one place so that "which agent may write" is answerable by
+ * reading one function rather than by reasoning about a prompt. A prompt is an
+ * instruction; this is the fence.
+ */
+export function buildAdhocChatArgs(
+  mcpConfig: unknown,
+  promptOrMessage: string,
+  resumeClaudeSessionId?: string,
+  pen?: { worktree: string } | null,
+): string[] {
   const args = [
     "--dangerously-skip-permissions",
     "--output-format",
@@ -153,10 +172,24 @@ export function buildAdhocChatArgs(mcpConfig: unknown, promptOrMessage: string, 
     // the account running the daemon can read. The prompt can ask it not to; only the
     // account's own permissions can stop it.
     "--allowedTools",
-    "Read,Grep,Glob",
+    pen ? "Read,Grep,Glob,Edit,Write,Bash" : "Read,Grep,Glob",
     "--disallowedTools",
-    "Skill(superpowers:*),Edit,Write,NotebookEdit,Bash,WebFetch,WebSearch",
+    pen
+      // With the pen, the shell is the point: the commit, the tests and the Gate are
+      // all run through it. What stays refused is the network, which no change to a
+      // card's own files ever needs, and which is the one power whose absence cannot
+      // be checked afterwards by reading the branch.
+      ? "Skill(superpowers:*),NotebookEdit,WebFetch,WebSearch"
+      : "Skill(superpowers:*),Edit,Write,NotebookEdit,Bash,WebFetch,WebSearch",
   ];
+  if (pen) {
+    // The worktree is the working directory, so a relative path lands on the card's
+    // branch and an absolute one out of it is the reader's to notice rather than the
+    // ordinary case. Claude Code has no jail: this is where writes go, not a wall
+    // around where they can go, and the prompt is what says which files are the
+    // card's. Said plainly because an estate declaring its surface has to.
+    args.push("--add-dir", pen.worktree);
+  }
   if (resumeClaudeSessionId) {
     args.push("--resume", resumeClaudeSessionId);
   }

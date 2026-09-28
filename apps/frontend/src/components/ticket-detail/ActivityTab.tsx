@@ -454,8 +454,11 @@ export function ActivityTab({ projectId, ticketId, currentPhase: propPhase, hist
               <span className="ml-2">Buddy</span>
             </Button>
             <span className="ml-3 text-xs text-text-muted">
-              Reads this card and its branch, and answers questions. It cannot write or
-              reach the network.
+              Reads this card and its branch, and answers questions. On a card in
+              Review it can also make a change you ask for, on the card&apos;s own
+              branch, under the Gate. It cannot change what the card promises, cannot
+              write outside the files the card&apos;s ids govern, and cannot reach the
+              network.
             </span>
           </div>
         )}
