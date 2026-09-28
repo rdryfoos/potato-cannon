@@ -223,12 +223,55 @@ describe("SessionStore", () => {
 
     it("should return active session", () => {
       const ticket = ticketStore.createTicket(projectId, { title: "Test" });
-      const created = sessionStore.createSession({ projectId, ticketId: ticket.id });
+      const created = sessionStore.createSession({
+        projectId, ticketId: ticket.id, pid: 4242,
+      });
 
-      const active = sessionStore.getActiveSessionForTicket(ticket.id);
+      // Alive is asked of the operating system now, so the test says which answer it
+      // is testing against rather than depending on whatever pid 4242 happens to be.
+      const active = sessionStore.getActiveSessionForTicket(ticket.id, () => true);
 
       assert.ok(active);
       assert.strictEqual(active.id, created.id);
+    });
+
+    it("does not return a session whose process is gone, and ends the row", () => {
+      // The card from 2026-09-27: the Build worker exited, nothing observed the exit,
+      // and `ended_at IS NULL` went on saying an attempt was running for two days.
+      const ticket = ticketStore.createTicket(projectId, { title: "Test" });
+      const created = sessionStore.createSession({
+        projectId, ticketId: ticket.id, pid: 4242,
+      });
+
+      const active = sessionStore.getActiveSessionForTicket(ticket.id, () => false);
+
+      assert.strictEqual(active, null);
+      // Asking is also the repair: the row is closed, so the next reader is not told
+      // the same untruth and no sweep has to come along later.
+      assert.ok(sessionStore.getSession(created.id)?.endedAt);
+    });
+
+    it("does not return a session that never recorded a pid", () => {
+      // Every row written before the pid column existed. No pid, no handle, no claim.
+      const ticket = ticketStore.createTicket(projectId, { title: "Test" });
+      sessionStore.createSession({ projectId, ticketId: ticket.id });
+
+      assert.strictEqual(sessionStore.getActiveSessionForTicket(ticket.id), null);
+    });
+
+    it("finds a live session under a dead one", () => {
+      // The newest row being dead says nothing about the one under it.
+      const ticket = ticketStore.createTicket(projectId, { title: "Test" });
+      const first = sessionStore.createSession({
+        projectId, ticketId: ticket.id, pid: 1111,
+      });
+      sessionStore.createSession({ projectId, ticketId: ticket.id, pid: 2222 });
+
+      const active = sessionStore.getActiveSessionForTicket(
+        ticket.id, (row) => row.pid === 1111);
+
+      assert.ok(active);
+      assert.strictEqual(active.id, first.id);
     });
 
     it("should not return ended session", () => {
@@ -244,11 +287,15 @@ describe("SessionStore", () => {
     it("should return most recent active session", () => {
       const ticket = ticketStore.createTicket(projectId, { title: "Test" });
 
-      const first = sessionStore.createSession({ projectId, ticketId: ticket.id });
+      const first = sessionStore.createSession({
+        projectId, ticketId: ticket.id, pid: 1111,
+      });
       sessionStore.endSession(first.id);
-      const second = sessionStore.createSession({ projectId, ticketId: ticket.id });
+      const second = sessionStore.createSession({
+        projectId, ticketId: ticket.id, pid: 2222,
+      });
 
-      const active = sessionStore.getActiveSessionForTicket(ticket.id);
+      const active = sessionStore.getActiveSessionForTicket(ticket.id, () => true);
 
       assert.ok(active);
       assert.strictEqual(active.id, second.id);
@@ -281,11 +328,19 @@ describe("SessionStore", () => {
 
     it("should return true when ticket has active session", () => {
       const ticket = ticketStore.createTicket(projectId, { title: "Test" });
-      sessionStore.createSession({ projectId, ticketId: ticket.id });
+      sessionStore.createSession({ projectId, ticketId: ticket.id, pid: 4242 });
 
-      const result = sessionStore.hasActiveSession(ticket.id);
+      const result = sessionStore.hasActiveSession(ticket.id, undefined, () => true);
 
       assert.strictEqual(result, true);
+    });
+
+    it("says no when the session's process is gone", () => {
+      const ticket = ticketStore.createTicket(projectId, { title: "Test" });
+      sessionStore.createSession({ projectId, ticketId: ticket.id, pid: 4242 });
+
+      assert.strictEqual(
+        sessionStore.hasActiveSession(ticket.id, undefined, () => false), false);
     });
 
     it("should return false when ticket has no active session", () => {

@@ -24,6 +24,7 @@ import { getBrainstorm } from "../../stores/brainstorm.store.js";
 import { getEpicById } from "../../stores/epic.store.js";
 import {
   createStoredSession,
+  setStoredSessionPid,
   endStoredSession,
   getLatestClaudeSessionId,
   getLatestClaudeSessionIdForTicket,
@@ -459,6 +460,10 @@ export class SessionService {
       },
     });
 
+    // The pid, so that whether this attempt is running can be asked of the
+    // operating system rather than remembered in a flag nobody clears.
+    setStoredSessionPid(sessionId, proc.pid ?? null);
+
     console.log(`[spawnClaudeSession] Claude PTY spawned, pid: ${proc.pid}`);
 
     let exitResolver!: () => void;
@@ -790,6 +795,10 @@ export class SessionService {
       },
     });
 
+    // The pid, so that whether this attempt is running can be asked of the
+    // operating system rather than remembered in a flag nobody clears.
+    setStoredSessionPid(sessionId, proc.pid ?? null);
+
     let exitResolver!: () => void;
     const exitPromise = new Promise<void>((resolve) => {
       exitResolver = resolve;
@@ -1021,6 +1030,10 @@ export class SessionService {
         POTATO_EPIC_ID: epicId,
       },
     });
+
+    // The pid, so that whether this attempt is running can be asked of the
+    // operating system rather than remembered in a flag nobody clears.
+    setStoredSessionPid(sessionId, proc.pid ?? null);
 
     let exitResolver!: () => void;
     const exitPromise = new Promise<void>((resolve) => {

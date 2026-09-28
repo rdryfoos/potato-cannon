@@ -1,6 +1,6 @@
 import type Database from "better-sqlite3";
 
-const CURRENT_SCHEMA_VERSION = 18;
+const CURRENT_SCHEMA_VERSION = 19;
 
 /**
  * Run database migrations.
@@ -79,6 +79,10 @@ export function runMigrations(db: Database.Database): void {
 
   if (version < 18) {
     migrateV18(db);
+  }
+
+  if (version < 19) {
+    migrateV19(db);
   }
 
   db.pragma(`user_version = ${CURRENT_SCHEMA_VERSION}`);
@@ -669,5 +673,25 @@ function migrateV18(db: Database.Database): void {
   const columns = db.pragma("table_info(ticket_history)") as { name: string }[];
   if (!columns.some((c) => c.name === "refused")) {
     db.exec(`ALTER TABLE ticket_history ADD COLUMN refused INTEGER NOT NULL DEFAULT 0`);
+  }
+}
+
+/**
+ * V19: the pid of the process a session is running in.
+ *
+ * "Is an attempt running on this card" was `ended_at IS NULL`: a flag, set when a
+ * process is spawned and cleared when its exit is observed. Every way of not observing
+ * an exit leaves it set for ever, and the card is busy for ever. On 2026-09-27 a card
+ * in Review with a two-day-old status line refused a write because an attempt was
+ * running on it; nothing was running, and nothing on the card said otherwise.
+ *
+ * A pid lets the question be asked of the operating system instead. Existing rows get
+ * NULL, which reads as not alive: a row written before this migration belongs to a
+ * process this daemon has no handle on, and the honest answer about it is no.
+ */
+function migrateV19(db: Database.Database): void {
+  const columns = db.pragma("table_info(sessions)") as { name: string }[];
+  if (!columns.some((c) => c.name === "pid")) {
+    db.exec(`ALTER TABLE sessions ADD COLUMN pid INTEGER`);
   }
 }

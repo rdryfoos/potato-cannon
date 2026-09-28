@@ -68,6 +68,8 @@ import {
 import { scanPendingResponses, clearQuestion, clearResponse, readQuestion, getPendingQuestionsByProject } from "../stores/chat.store.js";
 import { artifactChatStore } from "../stores/artifact-chat.store.js";
 import { SESSIONS_DIR, LOCK_FILE, PID_FILE, TASKS_DIR } from "../config/paths.js";
+import { openStoredSessions } from "../stores/session.store.js";
+import { sweepDeadSessions } from "../services/session/liveness.js";
 import type { GlobalConfig, Project } from "../types/config.types.js";
 import { getWorkerState, clearWorkerState } from "../services/session/worker-state.js";
 import { getPhaseConfig } from "../services/session/phase-config.js";
@@ -124,6 +126,27 @@ async function loadConfig(): Promise<GlobalConfig> {
  * Recover orphaned sessions on startup.
  */
 async function recoverOrphanedSessions(): Promise<void> {
+  // The database first, the log second.
+  //
+  // This used to walk the log directory and end a row only when it found a file that
+  // parsed, opened on session_start and did not close on session_end. Every other
+  // shape left the row open: a log truncated mid-write by a kill throws in JSON.parse
+  // and is swallowed below, a log that was cleaned up is not there to read, and the
+  // row that the board actually asks about goes on saying an attempt is running.
+  //
+  // So the rows are swept first, on their own terms: this daemon has just started, so
+  // nothing any earlier daemon spawned is alive, whatever its log says. The log pass
+  // after it is for the reader, not for the record.
+  const swept = sweepDeadSessions({
+    open: () => openStoredSessions().map((s) => ({
+      id: s.id, pid: s.pid, startedAt: s.startedAt,
+    })),
+    end: endStoredSession,
+  });
+  for (const id of swept) {
+    console.log(`[recovery] Ended session ${id}: its process is gone`);
+  }
+
   let files: string[];
   try {
     files = await fs.readdir(SESSIONS_DIR);
@@ -147,10 +170,22 @@ async function recoverOrphanedSessions(): Promise<void> {
 
       if (lines.length === 0) continue;
 
-      const lastLine = JSON.parse(lines[lines.length - 1]);
+      // A truncated last line is the ordinary shape of a log whose process was
+      // killed, so it is read as "no session_end" rather than thrown.
+      let lastLine: { type?: string } = {};
+      try {
+        lastLine = JSON.parse(lines[lines.length - 1]);
+      } catch {
+        lastLine = {};
+      }
       if (lastLine.type === "session_end") continue;
 
-      const firstLine = JSON.parse(lines[0]);
+      let firstLine: { type?: string; meta?: Record<string, unknown> } = {};
+      try {
+        firstLine = JSON.parse(lines[0]);
+      } catch {
+        continue;
+      }
       if (firstLine.type !== "session_start") continue;
 
       const { projectId, ticketId } = firstLine.meta || {};

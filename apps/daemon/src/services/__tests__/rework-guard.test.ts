@@ -1,5 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { refusesReworkWrite } from "../rework-guard.js";
 
 /**
@@ -75,6 +77,38 @@ describe("a Rework block written mid-attempt", () => {
         workerActive: true,
         fromAgent: true,
       }),
+    );
+  });
+});
+
+describe("a pending question does not hold the card on its own", () => {
+  // The refusal a card in Review gave on 2026-09-27 read "an attempt is running on
+  // this card now", and it was true of neither half of what it was reading. The
+  // session flag was stale, and `pending_questions` is reconciled by nothing at all:
+  // a question whose asker died held the card for ever and no sweep would have found
+  // it, because no sweep looks there.
+  //
+  // The half is gone rather than made live, because liveness subsumes it: a question
+  // is a reason to wait only while somebody is waiting for the answer, and somebody
+  // waiting is a live session, which is already the whole of the test.
+  // From the source tree, not from dist beside this compiled test: the expression is
+  // what a reader of the route sees, and reading the build back would be reading the
+  // same decision through a transpiler.
+  const route = readFileSync(
+    join(process.cwd(), "src/server/routes/tickets.routes.ts"),
+    "utf8",
+  );
+  const where = route.slice(route.indexOf("const refusal = refusesReworkWrite("));
+  const call = where.slice(0, where.indexOf("});"));
+
+  it("workerActive is the liveness question and nothing else", () => {
+    assert.match(call, /workerActive: Boolean\(getActiveSessionForTicket\(ticketId\)\)/);
+  });
+
+  it("readQuestion is no longer part of it", () => {
+    assert.ok(
+      !call.includes("readQuestion"),
+      "a pending question is back in workerActive, and nothing reconciles that table",
     );
   });
 });

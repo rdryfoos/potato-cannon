@@ -746,10 +746,22 @@ export function registerTicketRoutes(
         // that the running attempt never saw. Buddy is the caller this is for: it is
         // answerable while a worker runs now, and answering is all it may do until the
         // worker lands. A hand is not stopped, because a hand has chosen to.
+        //
+        // One question now: is there a live process on this card.
+        //
+        // getActiveSessionForTicket asks the operating system and ends the rows whose
+        // processes are gone, so a card whose worker exited without its exit being
+        // observed is not busy.
+        //
+        // The pending-question half is gone rather than made live, because liveness
+        // subsumes it. A question is a reason to wait only while somebody is waiting
+        // for the answer, and somebody waiting is a live session, which is already the
+        // whole of this test. What it used to add was the failure: nothing reconciles
+        // pending_questions at startup, so a question whose asker died held the card
+        // for ever and no sweep would have found it.
         const refusal = refusesReworkWrite({
           blocks,
-          workerActive: Boolean(getActiveSessionForTicket(ticketId)) ||
-            Boolean(readQuestion(projectId, ticketId)),
+          workerActive: Boolean(getActiveSessionForTicket(ticketId)),
           fromAgent: (declaredActor ?? "").trim() === "agent",
         });
         if (refusal) {

@@ -63,6 +63,9 @@ mock.module("../../stores/conversation.store.js", {
 const mockDb = {
   prepare: (_sql: string) => ({
     get: () => null,
+    // getActiveSessionForTicket reads every open row now, not only the newest: the
+    // newest being dead says nothing about the one under it.
+    all: () => [],
     run: () => ({}),
   }),
 };
