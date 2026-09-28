@@ -1,4 +1,5 @@
 import type Database from "better-sqlite3";
+import { sessionIsAlive, type LivenessRow } from "../services/session/liveness.js";
 import { randomUUID } from "crypto";
 import { getDatabase } from "./db.js";
 import type {
@@ -20,6 +21,7 @@ interface SessionRow {
   agent_source: string | null;
   started_at: string;
   ended_at: string | null;
+  pid: number | null;
   exit_code: number | null;
   phase: string | null;
   metadata: string | null;
@@ -40,6 +42,7 @@ function rowToSession(row: SessionRow): StoredSession {
     agentSource: row.agent_source || undefined,
     startedAt: row.started_at,
     endedAt: row.ended_at || undefined,
+    pid: row.pid ?? undefined,
     exitCode: row.exit_code ?? undefined,
     phase: row.phase || undefined,
     metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
@@ -63,8 +66,8 @@ export class SessionStore {
 
     this.db
       .prepare(
-        `INSERT INTO sessions (id, project_id, ticket_id, brainstorm_id, claude_session_id, agent_source, started_at, phase, metadata)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO sessions (id, project_id, ticket_id, brainstorm_id, claude_session_id, agent_source, started_at, phase, metadata, pid)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         id,
@@ -75,10 +78,33 @@ export class SessionStore {
         input.agentSource || null,
         now,
         input.phase || null,
-        input.metadata ? JSON.stringify(input.metadata) : null
+        input.metadata ? JSON.stringify(input.metadata) : null,
+        input.pid ?? null
       );
 
     return this.getSession(id)!;
+  }
+
+  /**
+   * The pid of the process this session is running in, once there is one.
+   *
+   * The row is written before the process exists, so the pid arrives a moment later.
+   * Until it does the row reads as not alive, which is the safe direction: a card that
+   * is briefly writable is a smaller fault than a card that is busy for ever.
+   */
+  setSessionPid(sessionId: string, pid: number | null): boolean {
+    const result = this.db
+      .prepare("UPDATE sessions SET pid = ? WHERE id = ?")
+      .run(pid ?? null, sessionId);
+    return result.changes > 0;
+  }
+
+  /** Every session still open, whatever its process is doing. For the boot sweep. */
+  openSessions(): StoredSession[] {
+    const rows = this.db
+      .prepare("SELECT * FROM sessions WHERE ended_at IS NULL")
+      .all() as SessionRow[];
+    return rows.map(rowToSession);
   }
 
   endSession(sessionId: string, exitCode?: number): boolean {
@@ -126,16 +152,39 @@ export class SessionStore {
     return rows.map(rowToSession);
   }
 
-  getActiveSessionForTicket(ticketId: string): StoredSession | null {
-    const row = this.db
+  /**
+   * The session a live process is running in for this card, and nothing else.
+   *
+   * It was the newest row with `ended_at IS NULL`, which is a flag somebody has to
+   * clear. This asks the operating system, and ends every row it finds that is not
+   * alive, so the answer repairs the record rather than reporting it. A card whose
+   * worker exited without its exit being observed stops being busy the first time
+   * anybody asks about it.
+   *
+   * Every open row is looked at rather than only the newest, because the newest being
+   * dead says nothing about the one under it.
+   */
+  getActiveSessionForTicket(
+    ticketId: string,
+    alive: (row: LivenessRow) => boolean = sessionIsAlive,
+  ): StoredSession | null {
+    const rows = this.db
       .prepare(
         `SELECT * FROM sessions
          WHERE ticket_id = ? AND ended_at IS NULL
-         ORDER BY started_at DESC LIMIT 1`
+         ORDER BY started_at DESC`
       )
-      .get(ticketId) as SessionRow | undefined;
+      .all(ticketId) as SessionRow[];
 
-    return row ? rowToSession(row) : null;
+    let live: StoredSession | null = null;
+    for (const row of rows) {
+      if (alive({ id: row.id, pid: row.pid, startedAt: row.started_at })) {
+        if (!live) live = rowToSession(row);
+        continue;
+      }
+      this.endSession(row.id, -1);
+    }
+    return live;
   }
 
   getActiveSessionForBrainstorm(brainstormId: string): StoredSession | null {
@@ -150,9 +199,13 @@ export class SessionStore {
     return row ? rowToSession(row) : null;
   }
 
-  hasActiveSession(ticketId?: string, brainstormId?: string): boolean {
+  hasActiveSession(
+    ticketId?: string,
+    brainstormId?: string,
+    alive: (row: LivenessRow) => boolean = sessionIsAlive,
+  ): boolean {
     if (ticketId) {
-      return this.getActiveSessionForTicket(ticketId) !== null;
+      return this.getActiveSessionForTicket(ticketId, alive) !== null;
     }
     if (brainstormId) {
       return this.getActiveSessionForBrainstorm(brainstormId) !== null;
@@ -238,6 +291,14 @@ export function endStoredSession(
   exitCode?: number
 ): boolean {
   return new SessionStore(getDatabase()).endSession(sessionId, exitCode);
+}
+
+export function setStoredSessionPid(sessionId: string, pid: number | null): boolean {
+  return new SessionStore(getDatabase()).setSessionPid(sessionId, pid);
+}
+
+export function openStoredSessions(): StoredSession[] {
+  return new SessionStore(getDatabase()).openSessions();
 }
 
 export function getStoredSession(sessionId: string): StoredSession | null {

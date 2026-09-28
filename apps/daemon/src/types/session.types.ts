@@ -59,6 +59,9 @@ export interface SessionOptions {
 // =============================================================================
 
 export interface CreateSessionInput {
+  /** The operating system's id for the process this session runs in, so that whether
+   *  it is still running can be asked rather than remembered. */
+  pid?: number | null;
   projectId: string;
   ticketId?: string;
   brainstormId?: string;
@@ -70,6 +73,8 @@ export interface CreateSessionInput {
 
 export interface StoredSession {
   id: string;
+  /** The process this session runs in, when one has been recorded. */
+  pid?: number;
   projectId: string;
   ticketId?: string;
   brainstormId?: string;
