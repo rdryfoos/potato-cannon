@@ -10,6 +10,7 @@ import {
   clearResponse,
 } from "../../stores/chat.store.js";
 import { listArtifacts, getTicket } from "../../stores/ticket.store.js";
+import { getLatestClaudeSessionIdForTicket } from "../../stores/session.store.js";
 import { addMessage, getMessages } from "../../stores/conversation.store.js";
 import { renderTranscript } from "../../services/transcript.js";
 import { tryLoadAgentDefinition } from "../../services/session/index.js";
@@ -203,8 +204,18 @@ export function registerTicketChatRoutes(
         // session.active is expected to be false here on every follow-up -
         // see the identical comment in artifact-chat.routes.ts's /input
         // route, same mechanism, same reasoning.
+        // Two places the id can be, and both are asked.
+        //
+        // A pending question carries it when the agent asked one, which is the path
+        // this route was built for. Buddy on a card in Review usually asks nothing: it
+        // answers, or it makes the change. Its claude_session_id is on its own session
+        // row, put there by adhoc-chat-runner when the stream names it, and reading
+        // that row is what lets a second turn resume at all.
         const pendingQuestion = readQuestion(projectId, contextId);
-        const claudeSessionId = pendingQuestion?.claudeSessionId;
+        const claudeSessionId =
+          pendingQuestion?.claudeSessionId ??
+          getLatestClaudeSessionIdForTicket(session.ticketId) ??
+          undefined;
         if (!claudeSessionId) {
           res.status(410).json({
             error: "No resumable session found for this conversation - start a new question instead.",

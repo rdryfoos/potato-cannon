@@ -11,7 +11,12 @@ import path from "path";
 import pty from "node-pty";
 import type { ArtifactChatSession } from "../../stores/artifact-chat.store.js";
 import { artifactChatStore } from "../../stores/artifact-chat.store.js";
-import { createStoredSession, endStoredSession, updateClaudeSessionId } from "../../stores/session.store.js";
+import {
+  createStoredSession,
+  endStoredSession,
+  setStoredSessionPid,
+  updateClaudeSessionId,
+} from "../../stores/session.store.js";
 import { SESSIONS_DIR } from "../../config/paths.js";
 
 export function runAdhocChatProcess(
@@ -61,6 +66,14 @@ export function runAdhocChatProcess(
       POTATO_BRAINSTORM_ID: session.contextId,
     },
   });
+
+  // The pid, for the same reason every other spawn records one: whether this session is
+  // still running is asked of the operating system rather than read from a flag. Without
+  // it the row reads as not alive the moment it is written, and that is what stopped a
+  // second turn on a card. ChatService.askAsync looks this session up to find the
+  // claude_session_id it embeds for a later --resume; that lookup ends rows whose
+  // process is gone; an adhoc session with no pid was gone before it started.
+  setStoredSessionPid(storedSession.id, proc.pid ?? null);
 
   // node-pty delivers data in ~1KB read chunks, not one chunk per logical
   // line - a single stream-json event (the system/init event especially,

@@ -1,5 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { penFor } from "../ticket-chat.routes.js";
 import { buildAdhocChatArgs } from "../../../services/session/adhoc-chat-runner.js";
 
@@ -90,5 +92,59 @@ describe("the powers that go with it", () => {
     const none = buildAdhocChatArgs({}, "hello", undefined, penFor("Build", "/p", "BAN-1"));
     assert.strictEqual(tools(none, "--allowedTools"), "Read,Grep,Glob");
     assert.ok(tools(none, "--disallowedTools").includes("Write"));
+  });
+});
+
+describe("a second turn on the same card", () => {
+  // Buddy answered once and the next message came back "No resumable session found for
+  // this conversation". The claude_session_id a resume needs is on Buddy's own session
+  // row, put there when the stream names it; the route read it only from a pending
+  // question, which exists only when the agent asked one, and Buddy answers.
+  //
+  // Underneath that, the row itself read as not alive: an adhoc session was created
+  // without a pid, and a row with no pid is not alive, so the lookup that finds the id
+  // to embed ended the row instead of returning it.
+  // From the source tree, by cwd: these tests run out of dist/, where there is no .ts
+  // beside them, and `pnpm test` runs from apps/daemon. Same form as
+  // rework-guard.test.ts, for the same reason.
+  const src = (rel: string) => readFileSync(join(process.cwd(), "src", rel), "utf8");
+  const runner = src("services/session/adhoc-chat-runner.ts");
+  const route = src("server/routes/ticket-chat.routes.ts");
+
+  it("the adhoc session records its pid, so its row is alive while it runs", () => {
+    assert.match(runner, /setStoredSessionPid\(storedSession\.id, proc\.pid \?\? null\)/);
+  });
+
+  it("the resume reads the session row and not only a pending question", () => {
+    assert.match(route, /getLatestClaudeSessionIdForTicket\(session\.ticketId\)/);
+    // The question first, because when the agent did ask one that is the right id.
+    assert.ok(
+      route.indexOf("pendingQuestion?.claudeSessionId") <
+        route.indexOf("getLatestClaudeSessionIdForTicket(session.ticketId)"),
+      "the session row is read before the pending question",
+    );
+  });
+
+  it("the pen is re-asked on the resume path, not carried over from the first turn", () => {
+    const resume = route.slice(route.indexOf("async function resumeTicketChatSession"));
+    assert.match(resume.slice(0, resume.indexOf("\n}")), /penFor\(/);
+  });
+
+  it("a card that left Review between turns resumes read-only", () => {
+    // penFor is asked again with the card's phase as it is now, and null is the
+    // read-only argument set, so the two are wired and this is the whole of it.
+    const gone = buildAdhocChatArgs({}, "next", "claude-sess-1", penFor("Done", "/p", "BAN-1"));
+    assert.strictEqual(tools(gone, "--allowedTools"), "Read,Grep,Glob");
+    assert.ok(tools(gone, "--disallowedTools").includes("Write"));
+    assert.strictEqual(gone.indexOf("--add-dir"), -1);
+    // and it is still a resume
+    assert.ok(gone.includes("--resume"));
+    assert.strictEqual(gone[gone.indexOf("--resume") + 1], "claude-sess-1");
+  });
+
+  it("a card still in Review resumes with the pen", () => {
+    const still = buildAdhocChatArgs({}, "next", "claude-sess-1", penFor("Review", "/p", "BAN-1"));
+    assert.ok(tools(still, "--allowedTools").includes("Write"));
+    assert.ok(still.includes("--resume"));
   });
 });
