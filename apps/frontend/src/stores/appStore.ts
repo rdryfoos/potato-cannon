@@ -59,6 +59,18 @@ interface AppState {
   clearTicketActivity: (projectId: string, ticketId: string) => void
   getTicketActivity: (projectId: string, ticketId: string) => string | undefined
 
+  /**
+   * What somebody has typed into a card's composer and not sent yet, keyed the same
+   * way. It lives here rather than in the component because the Agents tab unmounts
+   * the moment another tab is shown, and a half-written question to Buddy is not the
+   * component's to throw away. Deliberately outside `partialize`: a draft survives a
+   * tab switch and does not survive a reload.
+   */
+  composerDrafts: Map<string, Map<string, string>>
+  setComposerDraft: (projectId: string, ticketId: string, draft: string) => void
+  clearComposerDraft: (projectId: string, ticketId: string) => void
+  getComposerDraft: (projectId: string, ticketId: string) => string | undefined
+
   // UI State
   ticketSheetOpen: boolean
   ticketSheetTicketId: string | null
@@ -220,6 +232,27 @@ export const useAppStore = create<AppState>()(
         }),
       getTicketActivity: (projectId, ticketId) => {
         return get().ticketActivity.get(projectId)?.get(ticketId)
+      },
+
+      composerDrafts: new Map(),
+      setComposerDraft: (projectId, ticketId, draft) =>
+        set((state) => {
+          const next = new Map(state.composerDrafts)
+          const projectMap = new Map(next.get(projectId) ?? new Map())
+          projectMap.set(ticketId, draft)
+          next.set(projectId, projectMap)
+          return { composerDrafts: next }
+        }),
+      clearComposerDraft: (projectId, ticketId) =>
+        set((state) => {
+          const next = new Map(state.composerDrafts)
+          const projectMap = new Map(next.get(projectId) ?? new Map())
+          projectMap.delete(ticketId)
+          next.set(projectId, projectMap)
+          return { composerDrafts: next }
+        }),
+      getComposerDraft: (projectId, ticketId) => {
+        return get().composerDrafts.get(projectId)?.get(ticketId)
       },
 
       // Ticket sheet — closes brainstorm sidebar (mutual exclusion)
