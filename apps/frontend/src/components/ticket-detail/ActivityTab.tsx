@@ -109,7 +109,17 @@ const BUDDY_OPENING =
   'what you would worry about, and what is not covered.'
 
 export function ActivityTab({ projectId, ticketId, currentPhase: propPhase, history, archived }: ActivityTabProps) {
-  const [input, setInput] = useState('')
+  // The composer's text is held by the store, keyed by project and card, not by this
+  // component. The Agents tab is a Radix `TabsContent` with no `forceMount`, so showing
+  // Details unmounts this whole component and a `useState` draft goes with it: a reader
+  // who typed a question to Buddy, looked at Details to check something, and came back
+  // found an empty box. Nothing had failed, so nothing said so.
+  const input = useAppStore((s) => s.composerDrafts.get(projectId)?.get(ticketId) ?? '')
+  const setComposerDraft = useAppStore((s) => s.setComposerDraft)
+  const clearComposerDraft = useAppStore((s) => s.clearComposerDraft)
+  const setInput = useCallback(
+    (text: string) => setComposerDraft(projectId, ticketId, text),
+    [setComposerDraft, projectId, ticketId])
   // Who the composer is addressing. null means "whatever the situation calls for",
   // which is the worker while one runs and Buddy otherwise: what this composer did
   // before it had a choice in it.
@@ -296,7 +306,7 @@ export function ActivityTab({ projectId, ticketId, currentPhase: propPhase, hist
     if (!text.trim() || isSubmitting) return
 
     const messageText = text.trim()
-    setInput('')
+    clearComposerDraft(projectId, ticketId)
     setIsSubmitting(true)
 
     // Optimistically add user message
@@ -350,7 +360,7 @@ export function ActivityTab({ projectId, ticketId, currentPhase: propPhase, hist
       setIsSubmitting(false)
       textareaRef.current?.focus()
     }
-  }, [projectId, ticketId, isSubmitting, isAgentActive, ticketChatContextId, recipient, queryClient])
+  }, [projectId, ticketId, isSubmitting, isAgentActive, ticketChatContextId, recipient, queryClient, clearComposerDraft])
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {

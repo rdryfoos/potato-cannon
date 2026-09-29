@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react'
 import { ActivityTab } from './ActivityTab'
+import { useAppStore } from '@/stores/appStore'
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -24,18 +25,28 @@ vi.mock('@tanstack/react-query', () => ({
 }))
 
 // Mock appStore
+//
+// Only the two "is an agent running" predicates are invented here. Everything else is
+// the real store, because the composer's text now lives in it: a hand-rolled stand-in
+// held the draft without publishing a change, so typing updated nothing on screen and
+// the send button stayed disabled with text in the box.
 const mockIsTicketProcessing = vi.fn().mockReturnValue(false)
 const mockIsTicketPending = vi.fn().mockReturnValue(false)
 
-vi.mock('@/stores/appStore', () => ({
-  useAppStore: (selector: (s: Record<string, unknown>) => unknown) => {
-    const state = {
+vi.mock('@/stores/appStore', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/stores/appStore')>()
+  const real = actual.useAppStore as unknown as
+    ((selector: (state: Record<string, unknown>) => unknown) => unknown) & Record<string, unknown>
+  const wrapped = (selector: (s: Record<string, unknown>) => unknown) =>
+    real((state) => selector({
+      ...state,
       isTicketProcessing: mockIsTicketProcessing,
       isTicketPending: mockIsTicketPending,
-    }
-    return selector(state)
-  },
-}))
+    }))
+  // zustand hangs getState/setState/subscribe off the hook itself, and a bare wrapper
+  // function loses them, which a test calling setState finds out the hard way.
+  return { ...actual, useAppStore: Object.assign(wrapped, real) as unknown as typeof actual.useAppStore }
+})
 
 // Mock SSE hooks - store callbacks so we can trigger them
 let sessionOutputCallback: ((data: Record<string, unknown>) => void) | null = null
@@ -89,6 +100,7 @@ vi.mock('./RestartPhaseButton', () => ({
 describe('ActivityTab', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    useAppStore.setState({ composerDrafts: new Map() })
     sessionOutputCallback = null
     sessionEndedCallback = null
   })
