@@ -7,14 +7,14 @@
 // now a reader's change request arrives as a Rework block. Every one of those
 // writers has so far done the same thing - read the whole description, rebuild it,
 // and write the whole thing back - which means every write is a chance to lose
-// somebody else's. The estate's own robots/card-io.py says "targeted" in its
+// somebody else's. The project's own robots/card-io.py says "targeted" in its
 // comments for exactly this reason, and then does it in a shell.
 //
 // These are the primitives that make "targeted" true: each one changes the named
 // block or the named line and returns the rest of the document byte for byte. They
 // do no I/O, so they can be tested against the awkward cases rather than trusted.
 //
-// The block delimiters are the ones the estate already uses, so a block written
+// The block delimiters are the ones the project already uses, so a block written
 // here looks like the status block written there:
 //
 //   <!-- rework:begin -->

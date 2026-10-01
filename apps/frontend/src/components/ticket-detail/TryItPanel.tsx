@@ -22,7 +22,7 @@ interface TryResult {
  * Try it: run what the card built, without leaving the card.
  *
  * The button sends the card's id and nothing else. What runs is `robots/try.sh` in that
- * card's worktree, a file the estate governs and this page cannot name, choose or add
+ * card's worktree, a file the project governs and this page cannot name, choose or add
  * to. There is deliberately no field to type a command into: the whole safety of this
  * button is that a request can only ever say which card.
  *

@@ -171,7 +171,7 @@ export function registerTicketRoutes(
       };
 
       // Who is causing this move. A caller that is not a hand says so, and the only
-      // callers that may are the estate's own hooks, which name themselves. Anything
+      // callers that may are the project's own hooks, which name themselves. Anything
       // else is a hand: this API has no other kind of caller, and the hand is the
       // account the daemon runs as.
       const actor = resolveActor(declaredActor);

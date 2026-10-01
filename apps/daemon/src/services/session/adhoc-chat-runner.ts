@@ -179,7 +179,7 @@ export function buildAdhocChatArgs(
     // a shell is every other tool at once: with it, "cannot write" and "cannot reach
     // the network" are sentences rather than facts.
     //
-    // What this does not do, stated because an estate declaring its surface has to
+    // What this does not do, stated because a project declaring its surface has to
     // know: it does not confine reads to a directory. Read, Grep and Glob take
     // absolute paths and Claude Code has no jail, so an ad-hoc agent can read whatever
     // the account running the daemon can read. The prompt can ask it not to; only the
@@ -200,7 +200,7 @@ export function buildAdhocChatArgs(
     // branch and an absolute one out of it is the reader's to notice rather than the
     // ordinary case. Claude Code has no jail: this is where writes go, not a wall
     // around where they can go, and the prompt is what says which files are the
-    // card's. Said plainly because an estate declaring its surface has to.
+    // card's. Said plainly because a project declaring its surface has to.
     args.push("--add-dir", pen.worktree);
   }
   if (resumeClaudeSessionId) {

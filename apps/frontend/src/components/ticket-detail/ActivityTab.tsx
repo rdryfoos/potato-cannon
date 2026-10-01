@@ -98,7 +98,7 @@ const SPEAKER_STYLE: Record<
 const SELF: MessageSpeaker = { kind: 'person', name: 'You' }
 
 /**
- * What the Buddy button says to open with. The behaviour lives in the estate, in
+ * What the Buddy button says to open with. The behaviour lives in the project, in
  * robots/buddy.md, which is a governed file: a card branch that changes it is red at
  * the Gate. This string only points at it, so the Cannon is not the place anyone has
  * to edit to change what a buddy does.
@@ -450,8 +450,8 @@ export function ActivityTab({ projectId, ticketId, currentPhase: propPhase, hist
 
         {/* Buddy: one click, on a card waiting to be aligned. It starts the same
             ticket-wide Q&A session the input box below starts, with an opening
-            message that points the agent at the estate's own robots/buddy.md. The
-            estate governs what a buddy is; this button only asks for one. */}
+            message that points the agent at the project's own robots/buddy.md. The
+            project governs what a buddy is; this button only asks for one. */}
         {isAskableColumn(currentPhase) && !ticketChatContextId && (
           <div className="px-4 pb-2">
             <Button
