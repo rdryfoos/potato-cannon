@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback, useRef } from 'react'
+import { useAppStore } from '@/stores/appStore'
 import { renderMarkdown } from '@/lib/markdown'
 import {
   Pencil,
@@ -130,8 +131,38 @@ function SessionTerminalBar({ sessionId, isRunning }: SessionTerminalBarProps) {
 }
 
 export function DetailsTab({ projectId, ticketId, description, history }: DetailsTabProps) {
-  const [isEditing, setIsEditing] = useState(false)
-  const [editedDescription, setEditedDescription] = useState(description ?? '')
+  // An unsaved edit lives in the store, keyed by project and card, not in this
+  // component. Rik typed his first Rework block in here, dragged the card, and the text
+  // was gone with nothing said. Two things destroy this component: the panel's tabs are
+  // Radix `TabsContent` with no `forceMount`, so opening Agents unmounts it, and a drag
+  // refetches the card. Neither is a reason to throw away what somebody wrote.
+  const draft = useAppStore((s) => s.detailsDrafts.get(projectId)?.get(ticketId))
+  const setDetailsDraft = useAppStore((s) => s.setDetailsDraft)
+  const clearDetailsDraft = useAppStore((s) => s.clearDetailsDraft)
+
+  // Whether the editor is open is a property of the card, not of this component. The
+  // panel can be pointed at another card without unmounting, and an editor that stayed
+  // open across that would be offering to edit POT-2 because somebody opened POT-1's.
+  // A card with a draft is being edited by definition; a card without one is open only
+  // while this component is the thing that opened it.
+  const [editingCard, setEditingCard] = useState<string | null>(
+    draft !== undefined ? ticketId : null)
+  const isEditing = draft !== undefined || editingCard === ticketId
+  const setIsEditing = useCallback(
+    (open: boolean) => setEditingCard(open ? ticketId : null), [ticketId])
+  const editedDescription = draft ?? description ?? ''
+  // Takes the same two shapes `useState`'s setter does, because one caller is the image
+  // upload appending to whatever is already there.
+  const editedRef = useRef(editedDescription)
+  editedRef.current = editedDescription
+  const setEditedDescription = useCallback(
+    (next: string | ((prev: string) => string)) =>
+      setDetailsDraft(
+        projectId,
+        ticketId,
+        typeof next === 'function' ? next(editedRef.current) : next),
+    [setDetailsDraft, projectId, ticketId])
+  const isUnsaved = draft !== undefined && draft !== (description ?? '')
   const [isExpanded, setIsExpanded] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [selectedArtifact, setSelectedArtifact] = useState<Artifact | null>(null)
@@ -222,7 +253,7 @@ export function DetailsTab({ projectId, ticketId, description, history }: Detail
   }
 
   const handleCancel = () => {
-    setEditedDescription(description ?? '')
+    clearDetailsDraft(projectId, ticketId)
     setIsEditing(false)
   }
 
@@ -235,11 +266,12 @@ export function DetailsTab({ projectId, ticketId, description, history }: Detail
       },
       {
         onSuccess: () => {
+          clearDetailsDraft(projectId, ticketId)
           setIsEditing(false)
         }
       }
     )
-  }, [projectId, ticketId, editedDescription, updateTicket])
+  }, [projectId, ticketId, editedDescription, updateTicket, clearDetailsDraft])
 
   const handleImageUpload = useCallback(
     async (file: File) => {
@@ -274,9 +306,16 @@ export function DetailsTab({ projectId, ticketId, description, history }: Detail
       {/* Description Section */}
       <div>
         <div className="flex items-center justify-between mb-2">
-          <h3 className="text-xs font-medium text-text-muted uppercase tracking-wide">Description</h3>
+          <h3 className="text-xs font-medium text-text-muted uppercase tracking-wide">
+            Description
+            {isUnsaved && (
+              <span className="ml-2 normal-case tracking-normal text-accent" data-testid="details-unsaved">
+                unsaved
+              </span>
+            )}
+          </h3>
           {!isEditing && (
-            <IconButton tooltip="Edit" onClick={handleEdit}>
+            <IconButton tooltip="Edit" onClick={handleEdit} data-testid="details-edit">
               <Pencil className="h-4 w-4" />
             </IconButton>
           )}

@@ -71,6 +71,18 @@ interface AppState {
   clearComposerDraft: (projectId: string, ticketId: string) => void
   getComposerDraft: (projectId: string, ticketId: string) => string | undefined
 
+  /**
+   * An unsaved edit to a card's Details, keyed the same way as the composer's draft and
+   * for the same reason: the tab unmounts. A drag refetches the card, a tab switch
+   * destroys the panel, and either one took a half-written Rework block with it without
+   * saying so. Outside `partialize`, like the composer: kept across a tab switch and a
+   * drag, not across a reload.
+   */
+  detailsDrafts: Map<string, Map<string, string>>
+  setDetailsDraft: (projectId: string, ticketId: string, draft: string) => void
+  clearDetailsDraft: (projectId: string, ticketId: string) => void
+  getDetailsDraft: (projectId: string, ticketId: string) => string | undefined
+
   // UI State
   ticketSheetOpen: boolean
   ticketSheetTicketId: string | null
@@ -253,6 +265,27 @@ export const useAppStore = create<AppState>()(
         }),
       getComposerDraft: (projectId, ticketId) => {
         return get().composerDrafts.get(projectId)?.get(ticketId)
+      },
+
+      detailsDrafts: new Map(),
+      setDetailsDraft: (projectId, ticketId, draft) =>
+        set((state) => {
+          const next = new Map(state.detailsDrafts)
+          const projectMap = new Map(next.get(projectId) ?? new Map())
+          projectMap.set(ticketId, draft)
+          next.set(projectId, projectMap)
+          return { detailsDrafts: next }
+        }),
+      clearDetailsDraft: (projectId, ticketId) =>
+        set((state) => {
+          const next = new Map(state.detailsDrafts)
+          const projectMap = new Map(next.get(projectId) ?? new Map())
+          projectMap.delete(ticketId)
+          next.set(projectId, projectMap)
+          return { detailsDrafts: next }
+        }),
+      getDetailsDraft: (projectId, ticketId) => {
+        return get().detailsDrafts.get(projectId)?.get(ticketId)
       },
 
       // Ticket sheet — closes brainstorm sidebar (mutual exclusion)
