@@ -467,7 +467,7 @@ function updateNestedActiveWorker(
  * started in. Without this, the finished agent advances the card from wherever
  * a person has since put it: observed 2026-09-17 on a card moved by hand from
  * Build to Review, which the exiting Build agent then moved to Gate. That is a
- * transition no human authorised, and on an estate where leaving a column is a
+ * transition no human authorised, and in a project where leaving a column is a
  * human act it is the orchestrator overruling the hand.
  */
 export function isStaleCompletion(

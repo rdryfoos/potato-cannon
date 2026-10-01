@@ -11,7 +11,7 @@ import {
 } from "../speaker.js";
 
 describe("workerSpeaker", () => {
-  it("names the three workers this estate actually runs", () => {
+  it("names the three workers this project actually runs", () => {
     assert.deepEqual(workerSpeaker("agents/spec.md", "Spec"), {
       kind: "worker",
       name: "Spec worker",
@@ -74,6 +74,10 @@ describe("callerSpeaker", () => {
     assert.deepEqual(callerSpeaker("   "), { kind: "cannon", name: "An unnamed caller" });
   });
 
+  // "estate-hook" stays spelled that way after the 2026-09-30 sweep that replaced the
+  // word estate with project in this repository's prose. It is not prose: it is the name
+  // an outside caller sends, and this test's whole point is that the name is echoed back
+  // unchanged. Renaming it here would be renaming somebody else's identifier.
   it("names a caller that names itself", () => {
     assert.deepEqual(callerSpeaker("estate-hook"), {
       kind: "cannon",

@@ -30,7 +30,7 @@ export interface EntryCheckContext {
   fromPhase: string;
   toPhase: string;
   /** Who is causing this move: "hand:<user>", "auto", or "hook:<name>". The check is
-   * told rather than left to guess, because an estate writing its own account of a card
+   * told rather than left to guess, because a project writing its own account of a card
    * cannot tell a human's decision from the machine's from inside the command. */
   actor?: string;
 }

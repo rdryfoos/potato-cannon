@@ -8,7 +8,7 @@ import type { EntryCheck } from "../../../types/template.types.js";
  * Every phase transition says who caused it.
  *
  * Three kinds, and the reason all three matter: a hand's decision, the daemon advancing
- * a card on its own, and a named hook acting for the estate. Before 2026-09-20 the
+ * a card on its own, and a named hook acting for the project. Before 2026-09-20 the
  * history recorded only that a card moved, and an entry check could not tell which of
  * the three was asking. The check is told now, in POTATO_ACTOR.
  *

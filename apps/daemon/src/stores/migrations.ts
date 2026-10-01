@@ -600,7 +600,7 @@ function migrateV14(db: Database.Database): void {
  * V15: Add actor to ticket_history. Every phase transition records who caused it:
  * a hand, the daemon advancing a card on its own, or a named hook. Before this the
  * history said only that a card moved, so a board could not tell a human's decision
- * from the machine's, and an estate writing its own account of a card had nothing to
+ * from the machine's, and a project writing its own account of a card had nothing to
  * read. Null on rows written before this migration, which is honest: those transitions
  * were not recorded with an actor and guessing one now would be invention.
  */

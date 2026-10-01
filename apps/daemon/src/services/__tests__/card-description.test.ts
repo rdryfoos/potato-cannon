@@ -12,7 +12,7 @@ import {
   assertName,
 } from "../card-description.js";
 
-// A real card, as the estate writes them.
+// A real card, as the project writes them.
 const CARD = `ids: US-UI-10, FR-UI-10, AC-UI-10, AC-UI-20, AC-UI-30
 Build the web app that design/ draws, over the same records file the command line writes. Read design/README.md first.
 

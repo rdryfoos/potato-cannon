@@ -7,7 +7,7 @@ import path from "path";
 import { worktreePathFor } from "./thread.routes.js";
 
 /**
- * Try it: run the estate's own try script in a card's worktree and hand back what it
+ * Try it: run the project's own try script in a card's worktree and hand back what it
  * said.
  *
  * A reviewer can read a card's diff, its Gate and its thread, and until now could not
@@ -20,7 +20,7 @@ import { worktreePathFor } from "./thread.routes.js";
  * Nothing else is a parameter. The command is not supplied, not appended to, and not
  * interpreted by a shell: the daemon executes a fixed path inside a directory it
  * computed itself. There is no way to express "run something else" in a request, which
- * is the property that makes a button like this safe to put on a page. The estate
+ * is the property that makes a button like this safe to put on a page. The project
  * governs what that script does; the daemon governs that nothing else runs.
  */
 
