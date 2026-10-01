@@ -34,6 +34,7 @@ import { getWipStatus } from "../../services/session/wip.js";
 import { checkPhaseEntry } from "../../services/session/entry-check.js";
 import { chatService } from "../../services/chat.service.js";
 import { applyEdit, setLine } from "../../services/card-description.js";
+import { descriptionForMove } from "../../services/card-move.js";
 import { matchesOfferedAnswer } from "../../services/answer-match.js";
 import { refusesReworkWrite } from "../../services/rework-guard.js";
 import { CANNON, callerSpeaker } from "../../services/speaker.js";
@@ -248,18 +249,15 @@ export function registerTicketRoutes(
       // written. This line is the move itself, written where the work starts.
       let updates = { ...ticketUpdates };
       if (resolvedPhase && resolvedPhase !== oldPhase) {
-        const phases = await orderedPhases(projectId);
-        const from = phases.indexOf(oldPhase);
-        const to = phases.indexOf(resolvedPhase);
-        if (from >= 0 && to >= 0 && to < from) {
-          const base =
-            typeof updates.description === "string" ? updates.description : oldTicket.description || "";
-          updates.description = setLine(
-            base,
-            "sent-back",
-            `from ${oldPhase} to ${resolvedPhase} by ${actor} on ${new Date().toISOString()}`,
-          );
-        }
+        const moved = descriptionForMove({
+          description:
+            typeof updates.description === "string" ? updates.description : oldTicket.description || "",
+          oldPhase,
+          newPhase: resolvedPhase,
+          actor,
+          phases: await orderedPhases(projectId),
+        });
+        if (moved !== null) updates.description = moved;
       }
 
       const ticket = await updateTicket(projectId, ticketId, {
@@ -633,6 +631,25 @@ export function registerTicketRoutes(
           }
           res.json({ success: true, answered: false, conversation: true });
           return;
+        }
+
+        // The person's turn goes into the feed before it goes to the worker.
+        //
+        // The branch above writes it when the message is conversation. This branch did
+        // not, because the message was about to become the worker's `--print` prompt and
+        // that felt like delivery. It is not: pending_questions holds one answer, the
+        // resume consumes it and the row is cleared, so after a reload the person's half
+        // of the exchange was gone while Buddy's was still there. The two channels now
+        // keep the same record, and ticket-chat.routes.ts:452 is the line this matches.
+        {
+          const ticket = await getTicket(projectId, ticketId);
+          if (ticket?.conversationId) {
+            addMessage(ticket.conversationId, {
+              type: "user",
+              text: message,
+              speaker: { kind: "person", name: "You" },
+            });
+          }
         }
 
         writeResponse(projectId, ticketId, { answer: message });
