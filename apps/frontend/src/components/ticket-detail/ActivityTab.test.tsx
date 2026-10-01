@@ -295,7 +295,7 @@ describe('ActivityTab - Disabled Input When No Agent Active', () => {
     expect(screen.getByPlaceholderText('Ask about this ticket...')).toBeTruthy()
     expect(
       screen.getByText(
-        'No agent running - this asks a Q&A agent about the ticket, not a phase agent'
+        'No Worker Agents currently running on this card - this chat will go to your Thinking Buddy, whose context is the whole project'
       )
     ).toBeTruthy()
   })

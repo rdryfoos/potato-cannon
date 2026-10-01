@@ -547,7 +547,7 @@ export function ActivityTab({ projectId, ticketId, currentPhase: propPhase, hist
           <p className="text-xs text-text-muted mt-2 px-4">
             {isAgentActive
               ? "Press Enter to send, Shift+Enter for new line"
-              : "No agent running - this asks a Q&A agent about the ticket, not a phase agent"}
+              : "No Worker Agents currently running on this card - this chat will go to your Thinking Buddy, whose context is the whole project"}
           </p>
         </div>
       </div>
