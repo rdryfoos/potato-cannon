@@ -404,6 +404,7 @@ export class SessionService {
             POTATO_PROJECT_ID: projectId,
             POTATO_TICKET_ID: ticketId,
             POTATO_BRAINSTORM_ID: brainstormId,
+            POTATO_SESSION_ID: sessionId,
           },
         },
       },
@@ -457,6 +458,13 @@ export class SessionService {
         POTATO_PROJECT_ID: projectId,
         POTATO_TICKET_ID: ticketId,
         POTATO_BRAINSTORM_ID: brainstormId,
+        // The session's own id, because the worker is asked to write it onto every
+        // commit as a `Session:` trailer and had no way to learn it. No MCP tool returns
+        // it, there is no sessions route, and it was in no environment: a worker that
+        // ever filled that trailer guessed, and the one on Linux wrote "unavailable",
+        // which was the honest answer. It is passed to the agent and to the MCP proxy
+        // beside it, so both halves of the session agree about which session they are.
+        POTATO_SESSION_ID: sessionId,
       },
     });
 
