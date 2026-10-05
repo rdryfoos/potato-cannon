@@ -48,6 +48,46 @@ export function whichSync(name: string, platform: string = process.platform): st
   }
 }
 
+/**
+ * An executable, from PATH if it is there and from the named places if it is not.
+ *
+ * `whichSync` returns "" when it finds nothing; it does not throw. Seven call sites had
+ * written themselves a fallback in a `catch` block, which therefore never ran: on a
+ * machine where `claude` is not on the daemon's PATH, `claudePath` became "" and
+ * `pty.spawn("", args)` started a shell. The shell was handed Claude Code's flags and
+ * said so, in its own words, into a session log nobody reads:
+ *
+ *     sh: --dangerously-skip-permissions: invalid option
+ *
+ * Every phase worker on that machine died in under half a second with exit 2, and the
+ * board showed a session that started and ended. Found on the Mini on 2026-10-05, where
+ * the daemon runs under a scrubbed PATH that does not carry ~/.local/bin.
+ *
+ * So this returns a path that exists or throws with the name it was looking for. An
+ * empty command is the one answer a caller cannot use, and it is the one the old shape
+ * handed back.
+ */
+export function resolveExecutable(
+  name: string,
+  fallbacks: string[] = [],
+  platform: string = process.platform,
+): string {
+  const onPath = whichSync(name, platform);
+  if (onPath) return onPath;
+  for (const candidate of fallbacks) {
+    try {
+      if (candidate && fs.existsSync(candidate)) return candidate;
+    } catch {
+      /* an unreadable path is not an executable */
+    }
+  }
+  throw new Error(
+    `${name} is not on PATH and none of its fallbacks exist` +
+      (fallbacks.length ? `: ${fallbacks.join(", ")}` : "") +
+      `. PATH was: ${process.env.PATH ?? "(unset)"}`,
+  );
+}
+
 /** Git Bash, from PATH if it is there and from Git's usual places if it is not. */
 export function findBash(platform: string = process.platform): string {
   const onPath = whichSync("bash", platform);

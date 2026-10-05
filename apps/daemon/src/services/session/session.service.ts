@@ -1,5 +1,5 @@
 import { execSync } from "child_process";
-import { whichSync } from "../../lib/windows-exec.js";
+import { resolveExecutable } from "../../lib/windows-exec.js";
 import fs from "fs/promises";
 import { createWriteStream, createReadStream, existsSync } from "fs";
 import path from "path";
@@ -383,17 +383,11 @@ export class SessionService {
 
     // Get full path to node (required when running under Electron where PATH may not include node)
     let nodePath: string;
-    try {
-      nodePath = whichSync("node");
-    } catch {
-      // Fallback to common locations
-      const fallbacks = [
-        path.join(process.env.HOME || "", ".nvm", "versions", "node", "v22.14.0", "bin", "node"),
-        path.join(process.env.HOME || "", ".local", "bin", "node"),
-        "/usr/local/bin/node",
-      ];
-      nodePath = fallbacks.find((p) => existsSync(p)) || "node";
-    }
+    nodePath = resolveExecutable("node", [
+      path.join(process.env.HOME || "", ".nvm", "versions", "node", "v22.14.0", "bin", "node"),
+      path.join(process.env.HOME || "", ".local", "bin", "node"),
+      "/usr/local/bin/node",
+    ]);
 
     const mcpConfig = {
       mcpServers: {
@@ -441,11 +435,9 @@ export class SessionService {
     args.push("--print", prompt);
 
     let claudePath: string;
-    try {
-      claudePath = whichSync("claude");
-    } catch {
-      claudePath = path.join(process.env.HOME || "", ".local", "bin", "claude");
-    }
+    claudePath = resolveExecutable("claude", [
+      path.join(process.env.HOME || "", ".local", "bin", "claude"),
+    ]);
     console.log(`[spawnClaudeSession] Spawning ${agentType} at: ${claudePath}`);
 
     const proc = pty.spawn(claudePath, args, {
@@ -719,17 +711,11 @@ export class SessionService {
 
     // Get full path to node (required when running under Electron where PATH may not include node)
     let nodePath: string;
-    try {
-      nodePath = whichSync("node");
-    } catch {
-      // Fallback to common locations
-      const fallbacks = [
-        path.join(process.env.HOME || "", ".nvm", "versions", "node", "v22.14.0", "bin", "node"),
-        path.join(process.env.HOME || "", ".local", "bin", "node"),
-        "/usr/local/bin/node",
-      ];
-      nodePath = fallbacks.find((p) => existsSync(p)) || "node";
-    }
+    nodePath = resolveExecutable("node", [
+      path.join(process.env.HOME || "", ".nvm", "versions", "node", "v22.14.0", "bin", "node"),
+      path.join(process.env.HOME || "", ".local", "bin", "node"),
+      "/usr/local/bin/node",
+    ]);
 
     const mcpConfig = {
       mcpServers: {
@@ -785,11 +771,9 @@ export class SessionService {
     args.push("--print", fullPrompt);
 
     let claudePath: string;
-    try {
-      claudePath = whichSync("claude");
-    } catch {
-      claudePath = path.join(process.env.HOME || "", ".local", "bin", "claude");
-    }
+    claudePath = resolveExecutable("claude", [
+      path.join(process.env.HOME || "", ".local", "bin", "claude"),
+    ]);
 
     const proc = pty.spawn(claudePath, args, {
       name: "xterm-256color",
@@ -965,17 +949,11 @@ export class SessionService {
 
     const mcpProxyPath = path.join(__dirname, "..", "..", "mcp", "proxy.js");
 
-    let nodePath: string;
-    try {
-      nodePath = whichSync("node");
-    } catch {
-      const fallbacks = [
-        path.join(process.env.HOME || "", ".nvm", "versions", "node", "v22.14.0", "bin", "node"),
-        path.join(process.env.HOME || "", ".local", "bin", "node"),
-        "/usr/local/bin/node",
-      ];
-      nodePath = fallbacks.find((p) => existsSync(p)) || "node";
-    }
+    const nodePath = resolveExecutable("node", [
+      path.join(process.env.HOME || "", ".nvm", "versions", "node", "v22.14.0", "bin", "node"),
+      path.join(process.env.HOME || "", ".local", "bin", "node"),
+      "/usr/local/bin/node",
+    ]);
 
     const mcpConfig = {
       mcpServers: {
@@ -1021,11 +999,9 @@ export class SessionService {
     args.push("--print", fullPrompt);
 
     let claudePath: string;
-    try {
-      claudePath = whichSync("claude");
-    } catch {
-      claudePath = path.join(process.env.HOME || "", ".local", "bin", "claude");
-    }
+    claudePath = resolveExecutable("claude", [
+      path.join(process.env.HOME || "", ".local", "bin", "claude"),
+    ]);
 
     const proc = pty.spawn(claudePath, args, {
       name: "xterm-256color",

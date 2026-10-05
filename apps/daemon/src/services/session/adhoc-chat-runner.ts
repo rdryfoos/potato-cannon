@@ -5,7 +5,7 @@
 // PTY-chunking bug happened in the first place - the buggy pattern was
 // copied from session.service.ts without anyone noticing it was broken).
 import { execSync } from "child_process";
-import { whichSync } from "../../lib/windows-exec.js";
+import { resolveExecutable } from "../../lib/windows-exec.js";
 import { createWriteStream } from "fs";
 import path from "path";
 import pty from "node-pty";
@@ -48,11 +48,9 @@ export function runAdhocChatProcess(
   let claudeSessionIdCaptured = false;
 
   let claudePath: string;
-  try {
-    claudePath = whichSync("claude");
-  } catch {
-    claudePath = path.join(process.env.HOME || "", ".local", "bin", "claude");
-  }
+  claudePath = resolveExecutable("claude", [
+    path.join(process.env.HOME || "", ".local", "bin", "claude"),
+  ]);
 
   const proc = pty.spawn(claudePath, args, {
     name: "xterm-256color",
