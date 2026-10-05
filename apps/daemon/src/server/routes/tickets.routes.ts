@@ -35,6 +35,7 @@ import { checkPhaseEntry } from "../../services/session/entry-check.js";
 import { chatService } from "../../services/chat.service.js";
 import { applyEdit, setLine } from "../../services/card-description.js";
 import { descriptionForMove } from "../../services/card-move.js";
+import { queueOnCard, spawnDecision } from "../../services/queued-move.js";
 import { matchesOfferedAnswer } from "../../services/answer-match.js";
 import { refusesReworkWrite } from "../../services/rework-guard.js";
 import { CANNON, callerSpeaker } from "../../services/speaker.js";
@@ -285,10 +286,32 @@ export function registerTicketRoutes(
           const project = projects.get(projectId);
           if (project) {
             const activeSession = getActiveSessionForTicket(ticketId);
-            if (activeSession) {
+            const decision = spawnDecision({
+              hasAutomation: true,
+              activeSession: Boolean(activeSession),
+            });
+            if (decision === "queue") {
+              // The move is kept and the worker is queued, on the card. This used to be
+              // a line in the daemon's log and nothing else, so a hand who dragged a
+              // card into Build while a session was open got the column change, no
+              // worker, and no way to tell. Two drags went that way on 2026-10-05.
               console.log(
-                `Ticket ${ticketId} already has an active session, skipping spawn`,
+                `Ticket ${ticketId} has a session running; queueing the ${resolvedPhase} worker`,
               );
+              try {
+                const queued = await updateTicket(projectId, ticketId, {
+                  description: queueOnCard(
+                    ticket.description || "",
+                    resolvedPhase,
+                    new Date().toISOString(),
+                  ),
+                });
+                eventBus.emit("ticket:updated", { projectId, ticket: queued });
+              } catch (error) {
+                console.error(
+                  `[queueWorker] Could not write the queue line onto ${ticketId}: ${(error as Error).message}`,
+                );
+              }
             } else {
               console.log(
                 `Ticket ${ticketId} moved to ${resolvedPhase}, spawning Claude...`,
