@@ -73,6 +73,7 @@ import { sweepDeadSessions } from "../services/session/liveness.js";
 import type { GlobalConfig, Project } from "../types/config.types.js";
 import { getWorkerState, clearWorkerState } from "../services/session/worker-state.js";
 import { getPhaseConfig } from "../services/session/phase-config.js";
+import { drainQueuedMove } from "../services/queued-move.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -554,6 +555,46 @@ export async function main(): Promise<void> {
         try {
           const ticket = await getTicket(projectId, ticketId);
           eventBus.emit("ticket:updated", { projectId, ticket });
+
+          // A worker queued by a move made while this card was busy. The move kept the
+          // column and the spawn waited for this moment; see services/queued-move.ts.
+          if (ticket) {
+            const drained = await drainQueuedMove({
+              description: ticket.description || "",
+              activeSession: Boolean(getActiveSessionForTicket(ticketId)),
+              currentPhase: ticket.phase,
+              hasWorkers: async (phase) => {
+                const config = await getPhaseConfig(projectId, phase);
+                return Boolean(config?.workers && config.workers.length > 0);
+              },
+            });
+            if (drained.action === "spawn" || drained.action === "drop") {
+              const after = await updateTicket(projectId, ticketId, {
+                description: drained.description,
+              });
+              eventBus.emit("ticket:updated", { projectId, ticket: after });
+            }
+            if (drained.action === "drop") {
+              console.log(
+                `[queued-worker] ${ticketId}: the queued ${drained.why}; the line is off the card`,
+              );
+            }
+            if (drained.action === "spawn") {
+              const project = getProjects().get(projectId);
+              if (project && sessionService) {
+                console.log(
+                  `[queued-worker] ${ticketId}: the session ended, starting the queued ${drained.phase} worker`,
+                );
+                sessionService
+                  .spawnForTicket(projectId, ticketId, drained.phase, project.path)
+                  .catch((error: Error) =>
+                    console.error(
+                      `[queued-worker] ${ticketId}: the queued spawn failed: ${error.message}`,
+                    ),
+                  );
+              }
+            }
+          }
         } catch {
           // Ignore
         }
