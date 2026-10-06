@@ -1,5 +1,6 @@
 import { useState, useMemo, useCallback, useRef } from 'react'
 import { useAppStore } from '@/stores/appStore'
+import { splitStoryAndRecord } from '@/lib/card-record'
 import { renderMarkdown } from '@/lib/markdown'
 import {
   Pencil,
@@ -164,6 +165,13 @@ export function DetailsTab({ projectId, ticketId, description, history }: Detail
     [setDetailsDraft, projectId, ticketId])
   const isUnsaved = draft !== undefined && draft !== (description ?? '')
   const [isExpanded, setIsExpanded] = useState(false)
+  // The record folds under the story, shut to begin with. A reader opening a card wants
+  // what a person wrote; the SHAs are for the reader who has come looking for them.
+  const [recordOpen, setRecordOpen] = useState(false)
+
+  // Two things in one field: what a person wrote, and the named lines a worker or a
+  // hook put there. See lib/card-record.ts.
+  const { story, record } = useMemo(() => splitStoryAndRecord(description), [description])
   const [isUploading, setIsUploading] = useState(false)
   const [selectedArtifact, setSelectedArtifact] = useState<Artifact | null>(null)
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null)
@@ -236,16 +244,16 @@ export function DetailsTab({ projectId, ticketId, description, history }: Detail
 
   // Render markdown content
   const renderedDescription = useMemo(() => {
-    if (!description) return ''
-    return renderMarkdown(description)
-  }, [description])
+    if (!story) return ''
+    return renderMarkdown(story)
+  }, [story])
 
   // Check if description needs "See more" toggle
   const needsExpansion = useMemo(() => {
-    if (!description) return false
+    if (!story) return false
     // Rough estimate: if more than 200 chars or 5 lines
-    return description.length > 200 || description.split('\n').length > 5
-  }, [description])
+    return story.length > 200 || story.split('\n').length > 5
+  }, [story])
 
   const handleEdit = () => {
     setEditedDescription(description ?? '')
@@ -374,7 +382,7 @@ export function DetailsTab({ projectId, ticketId, description, history }: Detail
           </div>
         ) : (
           <div className="rounded-lg bg-bg-tertiary border border-border p-3">
-            {description ? (
+            {story ? (
               <>
                 <div
                   ref={descriptionRef}
@@ -417,8 +425,37 @@ export function DetailsTab({ projectId, ticketId, description, history }: Detail
         )}
       </div>
 
-      {/* History Section */}
+      {/* The record: the card's named lines and where it has been, under the story. */}
       <div>
+        <button
+          type="button"
+          data-testid="record-toggle"
+          onClick={() => setRecordOpen((open) => !open)}
+          className="flex w-full items-center gap-1 text-xs font-medium text-text-muted uppercase tracking-wide mb-2 hover:text-text-secondary"
+          aria-expanded={recordOpen}
+        >
+          {recordOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+          Record
+          {!recordOpen && record.length > 0 && (
+            <span className="normal-case tracking-normal text-text-muted/70">
+              {record.length === 1 ? '1 line' : `${record.length} lines`}
+              {history && history.length > 0 ? `, ${history.length} moves` : ''}
+            </span>
+          )}
+        </button>
+
+        {recordOpen && (
+        <div data-testid="record-body">
+        {record.length > 0 && (
+          <dl className="mb-4 rounded-lg bg-bg-tertiary border border-border p-3 text-sm">
+            {record.map((line) => (
+              <div key={line.name} className="flex gap-2 py-0.5">
+                <dt className="shrink-0 text-text-muted">{line.name}:</dt>
+                <dd className="break-all text-text-secondary">{line.value}</dd>
+              </div>
+            ))}
+          </dl>
+        )}
         <h3 className="text-xs font-medium text-text-muted uppercase tracking-wide mb-2">History</h3>
 
         {!history || history.length === 0 ? (
@@ -531,6 +568,8 @@ export function DetailsTab({ projectId, ticketId, description, history }: Detail
               })}
             </div>
           </div>
+        )}
+        </div>
         )}
       </div>
 

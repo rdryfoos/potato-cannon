@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useEffect } from 'react'
-import { isAskableColumn } from '@/lib/review-columns'
+import { isAskableColumn, isDecisionColumn } from '@/lib/review-columns'
 import { roleOf, type PhaseLike } from '@potato-cannon/shared'
 import { usePanelWidth } from '@/hooks/usePanelWidth'
 import { useLocation, useNavigate } from '@tanstack/react-router'
@@ -111,6 +111,10 @@ export function TicketDetailPanel() {
   )
 
   const { data: templateConfig } = useTemplate(currentProject?.template?.name ?? null)
+  // Whether this card is in the one column where a hand moving it is a decision. The
+  // template is asked what the column is for; a template that says nothing is read by
+  // its names, so a board that still says Align keeps its controls.
+  const canDecide = isDecisionColumn(ticket?.phase, templateConfig?.phases)
 
   // Phase change confirmation dialog
   const [confirmDialog, setConfirmDialog] = useState<{
@@ -313,17 +317,29 @@ export function TicketDetailPanel() {
 
                     {/* Demote / Block / Promote - small, sits between the ID pill and the close button */}
                     <div className="flex items-end gap-1 mx-auto self-end">
+                      {/*
+                        Promote and Demote are glyphs, and they are here only in the
+                        column where moving a card by hand is a decision somebody is
+                        making. On every other column they were an invitation to drag a
+                        card forward out of Spec or back out of Build, which is the
+                        Cannon's work rather than a hand's. The word went with the
+                        button: an arrow pointing out of the card is the thing itself,
+                        and the title says where it goes for anyone who hovers.
+                      */}
+                      {canDecide && (
                       <Button
                         variant="outline"
                         size="sm"
-                        className="h-4 rounded-full px-1.5 py-0 text-[8px] leading-none border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500/20 hover:text-red-300 disabled:opacity-40"
+                        aria-label={demoteTarget ? `Send back to ${demoteTarget}` : 'Nothing to send this back to'}
+                        data-testid="demote"
+                        className="h-4 w-5 rounded-full px-0 py-0 leading-none border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500/20 hover:text-red-300 disabled:opacity-40"
                         disabled={!demoteTarget || updateTicket.isPending}
                         onClick={() => demoteTarget && handlePhaseChange(demoteTarget)}
                         title={demoteTarget ? `Send back to ${demoteTarget}` : 'Nothing to send this back to'}
                       >
-                        <ArrowLeft className="h-2 w-2 mr-0.5" />
-                        Demote
+                        <ArrowLeft className="h-2 w-2" />
                       </Button>
+                      )}
                       <Button
                         variant="outline"
                         size="sm"
@@ -339,17 +355,20 @@ export function TicketDetailPanel() {
                         <Ban className="h-2 w-2 mr-0.5" />
                         {ticket.blocked ? 'Blocked' : 'Block'}
                       </Button>
+                      {canDecide && (
                       <Button
                         variant="outline"
                         size="sm"
-                        className="h-4 rounded-full px-1.5 py-0 text-[8px] leading-none border-green-500/30 bg-green-500/10 text-green-400 hover:bg-green-500/20 hover:text-green-300 disabled:opacity-40"
+                        aria-label={promoteTarget ? `Promote to ${promoteTarget}` : 'Already at the last phase'}
+                        data-testid="promote"
+                        className="h-4 w-5 rounded-full px-0 py-0 leading-none border-green-500/30 bg-green-500/10 text-green-400 hover:bg-green-500/20 hover:text-green-300 disabled:opacity-40"
                         disabled={!promoteTarget || updateTicket.isPending}
                         onClick={() => promoteTarget && handlePhaseChange(promoteTarget)}
-                        title={promoteTarget ? `Advance to ${promoteTarget}` : 'Already at the last phase'}
+                        title={promoteTarget ? `Promote to ${promoteTarget}` : 'Already at the last phase'}
                       >
-                        Promote
-                        <ArrowRight className="h-2 w-2 ml-0.5" />
+                        <ArrowRight className="h-2 w-2" />
                       </Button>
+                      )}
                     </div>
                   </div>
                   {editingTitle ? (

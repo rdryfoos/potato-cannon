@@ -36,6 +36,8 @@ import { chatService } from "../../services/chat.service.js";
 import { applyEdit, setLine } from "../../services/card-description.js";
 import { descriptionForMove } from "../../services/card-move.js";
 import { queueOnCard, spawnDecision } from "../../services/queued-move.js";
+import { checkCardIds } from "../../services/card-ids.js";
+import { beginMove, endMove, refusalFor } from "../../services/moves-in-flight.js";
 import { matchesOfferedAnswer } from "../../services/answer-match.js";
 import { refusesReworkWrite } from "../../services/rework-guard.js";
 import { CANNON, callerSpeaker } from "../../services/speaker.js";
@@ -88,6 +90,28 @@ export function registerTicketRoutes(
       if (!title) {
         res.status(400).json({ error: "Missing title" });
         return;
+      }
+
+      // The ids a card claims have to be ids the project's registry names.
+      //
+      // Nothing checked them. A typo, a renamed ID, or an ID copied from another
+      // project made a card that looked exactly like a real one, and the first thing to
+      // notice was the Gate, several columns and one worker's run later. The refusal
+      // names what it could not find, because "invalid ids" sends a person back to
+      // compare two lists by eye.
+      {
+        const project = getProjects().get(projectId);
+        const check = checkCardIds(project?.path, description);
+        if (!check.ok) {
+          res.status(400).json({
+            error: "Unknown ids",
+            message:
+              `This project's registry does not name ${check.missing.join(", ")}. ` +
+              "Create the promise first, or correct the ids: line.",
+            missing: check.missing,
+          });
+          return;
+        }
       }
 
       if (epicId) {
@@ -199,14 +223,42 @@ export function registerTicketRoutes(
       // ticket enters this phase. Runs before the WIP check and regardless of
       // force, which exceeds a limit but does not skip a check.
       if (resolvedPhase && resolvedPhase !== oldPhase) {
-        const entry = await checkPhaseEntry({
-          projectId,
-          projectPath: getProjects().get(projectId)?.path,
-          ticketId,
-          fromPhase: oldPhase,
+        // One move at a time, per card. An entry check can take minutes (Bang gives the
+        // Done check fifteen, because it runs a Gate), and a second drag arriving in
+        // that window used to run its own check alongside the first. Both wrote, and
+        // the card ended wherever the slower one finished.
+        const held = beginMove(ticketId, {
           toPhase: resolvedPhase,
           actor,
+          since: new Date().toISOString(),
         });
+        if (held) {
+          const reason = refusalFor(held);
+          recordRefusal(ticketId, resolvedPhase, reason, actor);
+          eventBus.emit("ticket:updated", { projectId, ticket: await getTicket(projectId, ticketId) });
+          res.status(409).json({
+            error: "A move is already running",
+            message: `Move to ${resolvedPhase} refused: ${reason}`,
+            phase: resolvedPhase,
+            reason,
+          });
+          return;
+        }
+        let entry;
+        try {
+          entry = await checkPhaseEntry({
+            projectId,
+            projectPath: getProjects().get(projectId)?.path,
+            ticketId,
+            fromPhase: oldPhase,
+            toPhase: resolvedPhase,
+            actor,
+          });
+        } finally {
+          // The claim covers the check and nothing after it. A check that threw still
+          // gives the card back, or one bad move makes the card unmovable for ever.
+          endMove(ticketId);
+        }
         if (entry && !entry.allowed) {
           // The refusal goes on the card's history. Without it the only trace is this
           // response body, which the board throws away, and a reader opening the card

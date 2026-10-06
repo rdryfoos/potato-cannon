@@ -1,6 +1,6 @@
 import React from 'react'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, cleanup } from '@testing-library/react'
+import { render, screen, cleanup, fireEvent } from '@testing-library/react'
 import { DetailsTab } from './DetailsTab'
 
 // Mock queries
@@ -60,6 +60,9 @@ describe('DetailsTab - Block Reason in History', () => {
       />
     )
 
+    // History moved under the record fold on 2026-10-06, so a reader opening a card
+    // sees the story first. It is still history; it is one control away.
+    fireEvent.click(screen.getByTestId('record-toggle'))
     expect(screen.getByText('Ralph loop exhausted max attempts (3)')).toBeTruthy()
   })
 
@@ -79,6 +82,7 @@ describe('DetailsTab - Block Reason in History', () => {
     )
 
     // Both phases should render, but no amber reason text
+    fireEvent.click(screen.getByTestId('record-toggle'))
     expect(screen.getByText('Ideas')).toBeTruthy()
     expect(screen.getByText('Build')).toBeTruthy()
 

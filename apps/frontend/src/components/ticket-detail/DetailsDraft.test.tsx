@@ -117,3 +117,60 @@ describe('an unsaved Details edit', () => {
     expect(useAppStore.getState().getDetailsDraft('test-project', 'POT-1')).toBeUndefined()
   })
 })
+
+describe('the story and the record', () => {
+  // Details showed the description in storage order, so the first thing on opening a
+  // card was four lines of SHAs. The story is first now; the record folds under it.
+  const WITH_RECORD = [
+    'ids: US-UI-10',
+    'branch: potato/BAN-1',
+    '',
+    'The story a person wrote.',
+  ].join('\n')
+
+  function Panel2({ description = WITH_RECORD }: { description?: string }) {
+    return (
+      <DetailsTab projectId="test-project" ticketId="POT-9" description={description} />
+    )
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    useAppStore.setState({ detailsDrafts: new Map() })
+  })
+  afterEach(cleanup)
+
+  it('shows the story and not the record lines, until the record is opened', () => {
+    render(<Panel2 />)
+    expect(screen.getByText('The story a person wrote.')).toBeTruthy()
+    expect(screen.queryByTestId('record-body')).toBeNull()
+    expect(screen.queryByText('potato/BAN-1')).toBeNull()
+  })
+
+  it('says how much is folded away, so the control is not a mystery', () => {
+    render(<Panel2 />)
+    expect(screen.getByTestId('record-toggle').textContent).toContain('2 lines')
+  })
+
+  it('opens the record on one control, and the lines are there', () => {
+    render(<Panel2 />)
+    fireEvent.click(screen.getByTestId('record-toggle'))
+    expect(screen.getByTestId('record-body')).toBeTruthy()
+    expect(screen.getByText('potato/BAN-1')).toBeTruthy()
+    expect(screen.getByText('US-UI-10')).toBeTruthy()
+  })
+
+  it('closes again on the same control', () => {
+    render(<Panel2 />)
+    fireEvent.click(screen.getByTestId('record-toggle'))
+    fireEvent.click(screen.getByTestId('record-toggle'))
+    expect(screen.queryByTestId('record-body')).toBeNull()
+  })
+
+  it('does not change the record, only where it sits', () => {
+    // The card is untouched: nothing here writes.
+    render(<Panel2 />)
+    fireEvent.click(screen.getByTestId('record-toggle'))
+    expect(mockMutate).not.toHaveBeenCalled()
+  })
+})
