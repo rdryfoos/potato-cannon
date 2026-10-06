@@ -1,6 +1,8 @@
 import { useState, useMemo, useCallback, useRef } from 'react'
 import { useAppStore } from '@/stores/appStore'
 import { splitStoryAndRecord } from '@/lib/card-record'
+import { latestRefusal } from '@/lib/latest-refusal'
+import { absoluteTime } from '@/lib/utils'
 import { renderMarkdown } from '@/lib/markdown'
 import {
   Pencil,
@@ -164,7 +166,6 @@ export function DetailsTab({ projectId, ticketId, description, history }: Detail
         typeof next === 'function' ? next(editedRef.current) : next),
     [setDetailsDraft, projectId, ticketId])
   const isUnsaved = draft !== undefined && draft !== (description ?? '')
-  const [isExpanded, setIsExpanded] = useState(false)
   // The record folds under the story, shut to begin with. A reader opening a card wants
   // what a person wrote; the SHAs are for the reader who has come looking for them.
   const [recordOpen, setRecordOpen] = useState(false)
@@ -172,6 +173,10 @@ export function DetailsTab({ projectId, ticketId, description, history }: Detail
   // Two things in one field: what a person wrote, and the named lines a worker or a
   // hook put there. See lib/card-record.ts.
   const { story, record } = useMemo(() => splitStoryAndRecord(description), [description])
+
+  // The latest history row, and only if it is a refusal. A refusal the card has since
+  // moved past is history rather than news.
+  const refusal = useMemo(() => latestRefusal(history), [history])
   const [isUploading, setIsUploading] = useState(false)
   const [selectedArtifact, setSelectedArtifact] = useState<Artifact | null>(null)
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null)
@@ -248,12 +253,6 @@ export function DetailsTab({ projectId, ticketId, description, history }: Detail
     return renderMarkdown(story)
   }, [story])
 
-  // Check if description needs "See more" toggle
-  const needsExpansion = useMemo(() => {
-    if (!story) return false
-    // Rough estimate: if more than 200 chars or 5 lines
-    return story.length > 200 || story.split('\n').length > 5
-  }, [story])
 
   const handleEdit = () => {
     setEditedDescription(description ?? '')
@@ -311,6 +310,36 @@ export function DetailsTab({ projectId, ticketId, description, history }: Detail
 
   return (
     <div className="space-y-6">
+      {/*
+        The refusal, above everything, when the last thing that happened to this card
+        was a move being refused. It is in the history too, and the history is folded
+        under the record now, so without this the one thing a reader most needs on
+        opening a refused card is two controls away: the card sits where it was and the
+        reason is somewhere nobody looks.
+      */}
+      {refusal && (
+        <div
+          data-testid="details-refusal"
+          className="rounded-lg border-2 border-red-500/70 bg-red-500/10 p-3"
+        >
+          <h3 className="text-xs font-medium uppercase tracking-wide text-red-400">
+            Refused
+          </h3>
+          <p className="mt-1 text-sm text-text-primary">
+            This card was refused entry to {refusal.phase}.
+          </p>
+          {refusal.reason && (
+            <p className="mt-1 text-sm text-text-secondary whitespace-pre-wrap">
+              {refusal.reason}
+            </p>
+          )}
+          <p className="mt-1 text-xs text-text-muted">
+            {refusal.actor ? `Asked by ${refusal.actor}, ` : ''}
+            {absoluteTime(refusal.when)}
+          </p>
+        </div>
+      )}
+
       {/* Description Section */}
       <div>
         <div className="flex items-center justify-between mb-2">
@@ -392,31 +421,10 @@ export function DetailsTab({ projectId, ticketId, description, history }: Detail
                     '[&_a]:text-accent [&_a]:no-underline hover:[&_a]:underline',
                     '[&_code]:bg-bg-tertiary [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded',
                     '[&_pre]:bg-bg-tertiary [&_pre]:p-2 [&_pre]:rounded',
-                    '[&_img]:max-w-full [&_img]:rounded',
-                    !isExpanded && needsExpansion && 'max-h-[100px] overflow-hidden'
+                    '[&_img]:max-w-full [&_img]:rounded'
                   )}
                   dangerouslySetInnerHTML={{ __html: renderedDescription }}
                 />
-                {needsExpansion && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setIsExpanded(!isExpanded)}
-                    className="mt-2 text-text-muted hover:text-text-secondary w-full"
-                  >
-                    {isExpanded ? (
-                      <>
-                        <ChevronUp className="h-3 w-3" />
-                        Show less
-                      </>
-                    ) : (
-                      <>
-                        <ChevronDown className="h-3 w-3" />
-                        See more
-                      </>
-                    )}
-                  </Button>
-                )}
               </>
             ) : (
               <p className="text-sm text-text-primary italic">No description</p>
