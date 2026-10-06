@@ -14,6 +14,30 @@ export function timeAgo(date: string | Date | undefined): string {
   return `${Math.floor(seconds / 86400)}d ago`
 }
 
+/**
+ * A date and time, in the reader's own locale, that says the same thing tomorrow.
+ *
+ * `timeAgo` reads well and lies quietly. "13d ago" is computed once at render and never
+ * again, so a board left open overnight says 13d of a card that is now 14 days old, and
+ * two cards that say "3d ago" may be a day apart. The relative form also cannot be
+ * compared, quoted in a message, or matched against a commit's date, which is what a
+ * card's age is actually wanted for.
+ *
+ * Local, not UTC: the reader is the one asking.
+ */
+export function absoluteTime(date: string | Date | undefined): string {
+  if (!date) return ''
+  const at = new Date(date)
+  if (Number.isNaN(at.getTime())) return ''
+  return at.toLocaleString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
 export function formatDate(date: string | Date | undefined): string {
   if (!date) return ''
   return new Date(date).toLocaleDateString()

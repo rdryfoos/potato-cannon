@@ -4,7 +4,7 @@ import { useDraggable } from '@dnd-kit/core'
 import { CSS } from '@dnd-kit/utilities'
 import { Archive, Image, Clock } from 'lucide-react'
 import { toast } from 'sonner'
-import { cn, timeAgo } from '@/lib/utils'
+import { cn, absoluteTime } from '@/lib/utils'
 import { useAppStore } from '@/stores/appStore'
 import { useArchiveTicket, useEpics } from '@/hooks/queries'
 import { ListItemCard } from '@/components/ui/list-item-card'
@@ -196,7 +196,7 @@ export function TicketCard({ ticket, projectId, swimlaneColor }: TicketCardProps
         </div>
         <span className="flex items-center gap-1 shrink-0">
           <Clock className="h-3 w-3" />
-          {timeAgo(ticket.updatedAt)}
+          {absoluteTime(ticket.updatedAt)}
         </span>
       </div>
 

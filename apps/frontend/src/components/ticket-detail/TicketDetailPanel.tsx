@@ -34,7 +34,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { cn, timeAgo } from '@/lib/utils'
+import { cn, absoluteTime } from '@/lib/utils'
 import { DetailsTab } from './DetailsTab'
 import { TryItPanel } from './TryItPanel'
 import { SettingsTab } from './SettingsTab'
@@ -127,6 +127,20 @@ export function TicketDetailPanel() {
   const [titleValue, setTitleValue] = useState('')
 
   // Tab state - resets to phase-based default when ticket changes
+  // The tab a person chose, kept until they choose another.
+  //
+  // This used to be reset on every card change, to the phase's own default: Agents for
+  // a column with workers, Details otherwise. The intent was good and the effect was
+  // that a reader comparing two cards on the same tab had to reselect it every time
+  // they moved between them, and a reader who had opened Details to read a story was
+  // put back on a feed.
+  //
+  // The panel is a singleton: __root.tsx renders one <TicketDetailPanel /> with no key,
+  // and the card it shows comes from the store, so nothing remounts when the card
+  // changes. Leaving this as component state is therefore all that "persists across
+  // cards" needs. It is deliberately not in the store: a tab is a choice made in a
+  // sitting, not a setting, and a reload starting on Details is the right default
+  // rather than something to remember.
   const [activeTab, setActiveTab] = useState<string>('details')
 
   // Sync title draft when ticket data changes
@@ -136,14 +150,6 @@ export function TicketDetailPanel() {
       setEditingTitle(false)
     }
   }, [ticket?.id, ticket?.title])
-
-  // Reset tab to phase-based default when ticket changes
-  useEffect(() => {
-    if (!ticket || !templateConfig) return
-    const phaseConfig = templateConfig.phases.find((p) => p.name === ticket.phase)
-    const newDefault = phaseHasAutomation(phaseConfig) ? 'activity' : 'details'
-    setActiveTab(newDefault)
-  }, [ticketSheetTicketId, ticket?.phase, templateConfig])
 
   // Build phase breadcrumb from history
   const phaseBreadcrumb = useMemo(() => {
@@ -413,7 +419,7 @@ export function TicketDetailPanel() {
 
                   {/* Timestamps */}
                   <p className="text-xs text-text-muted mt-2">
-                    Created {timeAgo(ticket.createdAt)} • Updated {timeAgo(ticket.updatedAt)}
+                    Created {absoluteTime(ticket.createdAt)} • Updated {absoluteTime(ticket.updatedAt)}
                   </p>
 
                   {/* Epic assignment */}
